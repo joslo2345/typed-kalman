@@ -204,7 +204,8 @@ pub fn beyond_f32() -> Scenario<4, 2> {
 /// Discrete white-noise-acceleration process noise for one constant-velocity axis, with
 /// acceleration spectral density `q`: `q [[dt³/3, dt²/2], [dt²/2, dt]]`.
 fn wna_axis(q: f64, dt: f64) -> Matrix2<f64> {
-    Matrix2::new(dt.powi(3) / 3.0, dt.powi(2) / 2.0, dt.powi(2) / 2.0, dt) * q
+    let (dt2, dt3) = (dt * dt, dt * dt * dt);
+    Matrix2::new(dt3 / 3.0, dt2 / 2.0, dt2 / 2.0, dt) * q
 }
 
 /// S1: a 1D constant-velocity target observed in position. State `[x, vx]`.
@@ -229,7 +230,8 @@ pub fn s2(steps: usize, seed: u64) -> Scenario<4, 2> {
 
 /// Range and bearing from a sensor at the origin to a target at `[x, y, ...]`.
 pub fn range_bearing(x: &Vector4<f64>) -> nalgebra::Vector2<f64> {
-    nalgebra::Vector2::new(x[0].hypot(x[1]), x[1].atan2(x[0]))
+    // Through libm so the generated S3 files are identical on every platform.
+    nalgebra::Vector2::new(libm::hypot(x[0], x[1]), libm::atan2(x[1], x[0]))
 }
 
 /// S3: a 2D constant-velocity target tracked by range and bearing. State `[x, y, vx, vy]`.

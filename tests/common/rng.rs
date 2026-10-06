@@ -1,6 +1,8 @@
 //! A small deterministic Gaussian generator (xorshift64* and Box-Muller).
 //!
-//! Every scenario is reproducible from its seed, with no extra dependencies.
+//! Every scenario is reproducible from its seed, bit for bit on every platform: the
+//! transcendental functions come from the pure-Rust `libm` crate, not the system math library,
+//! whose last-bit results differ between macOS and Linux.
 
 use nalgebra::{SMatrix, SVector};
 
@@ -33,13 +35,14 @@ impl Rng {
 
     /// Returns `10^u` for `u` uniform in `[lo_exp, hi_exp)`.
     pub fn log_uniform(&mut self, lo_exp: f64, hi_exp: f64) -> f64 {
-        10f64.powf(self.range(lo_exp, hi_exp))
+        libm::pow(10.0, self.range(lo_exp, hi_exp))
     }
 
     /// Returns a standard normal sample.
     pub fn normal(&mut self) -> f64 {
         let (u1, u2) = (self.uniform(), self.uniform());
-        (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos()
+        // sqrt is correctly rounded everywhere; ln and cos are not, so they come from libm.
+        (-2.0 * libm::log(u1)).sqrt() * libm::cos(2.0 * std::f64::consts::PI * u2)
     }
 
     /// Returns a vector of standard normal samples.

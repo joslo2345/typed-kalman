@@ -63,6 +63,7 @@ CI (`.github/workflows/ci.yml`) runs:
 
 CI facts learned the hard way:
 
+- **CI's `stable` moves ahead of the local toolchain**, and new clippy lints fail the lint job (the first public run hit Rust 1.99's `chunks_exact_to_as_chunks`). Before pushing, run clippy on the newest stable as a side toolchain: `rustup toolchain install <ver> --profile minimal --component clippy`, then `cargo +<ver> clippy …`. Install it alongside rather than updating the user's default `stable`.
 - **MSRV is 1.89** because nalgebra 0.35 declares it (`rust-version` in `Cargo.toml`); everything else needs 1.89 or less. If you raise a dependency, check its `rust-version`.
 - **`trybuild` `.stderr` snapshots only match the compiler that wrote them.** On any other toolchain, set `SKIP_UI_TESTS=1`. After upgrading the `ui` job's pinned toolchain, regenerate them.
 - **Old toolchains on this Mac:** rustc 1.89 can't link against the macOS 27 SDK (`tapi error: ... unknown architecture`). Use `SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk cargo +1.89 test`. This only affects the local machine; CI runs on Linux.
@@ -107,6 +108,7 @@ CI facts learned the hard way:
 
 - Five frozen scenarios (S1–S5) live in `tests/vectors/` (format in `tests/vectors/README.md`: `model.json` plus raw little-endian arrays). The guide wants them in a shared test-vectors repo, added as a Git submodule at `tests/vectors/`; that repo doesn't exist yet, so for now this repo generates and holds them. Don't change scenario files after results have been collected.
 - `tests/common/catalog.rs` defines exactly what each file contains (seeds, runs, dtype). `examples/generate_vectors.rs` writes the files from it, and `tests/vectors.rs` checks them bit for bit. If you change the catalog deliberately, regenerate the files and `SHA256SUMS` (`cd tests/vectors && shasum -a 256 S*/* > SHA256SUMS`). Load scenarios with `common::vectors::load::<N, M>("S2")`.
+- **The generator must be bit-reproducible across platforms.** `tests/vectors.rs` compares bit for bit, and the system math library's `ln`, `cos`, `pow`, `hypot` and `atan2` differ in the last bit between macOS and Linux. The first CI run failed on exactly that. So `rng.rs` and `scenarios.rs` use the pure-Rust `libm` crate for transcendental functions and plain multiplication instead of `powi`; only `sqrt` (correctly rounded everywhere) comes from std. Keep any new generator math on `libm`.
 - S3 must stay away from the bearing wrap at ±π, because the filters don't wrap residuals. The first S3 draft started at 2 km and random-walked to x < 0, which is why it now starts at 10 km.
 - Criterion group names must be `<Scenario>_<Filter>_<precision>` (e.g. `S2_KF_float64`) and function names must be the library name, because `scripts/criterion_to_csv.py` parses them from `target/criterion/`.
 - Results are appended to `results/results.csv` using the schema `library,library_version,scenario,filter,precision,metric,value,unit,commit,cpu,os,toolchain,date`. `make_table.py` writes the README table between `<!-- BENCH:START -->` and `<!-- BENCH:END -->`.

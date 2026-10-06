@@ -43,13 +43,18 @@ fn main() {
     let model: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(model_path).unwrap()).unwrap();
     let bytes = fs::read(zs_path).unwrap();
-    let zs: Vec<String> = bytes
-        .chunks_exact(8)
+    let values: Vec<f32> = bytes
+        .as_chunks::<8>()
+        .0
+        .iter()
         .take(STEPS * 2)
-        .map(|b| f64::from_le_bytes(b.try_into().unwrap()) as f32)
-        .collect::<Vec<_>>()
-        .chunks_exact(2)
-        .map(|z| format!("[{:?}f32, {:?}f32]", z[0], z[1]))
+        .map(|b| f64::from_le_bytes(*b) as f32)
+        .collect();
+    let zs: Vec<String> = values
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|[x, y]| format!("[{x:?}f32, {y:?}f32]"))
         .collect();
     let x0: Vec<String> = model["x0"]
         .as_array()

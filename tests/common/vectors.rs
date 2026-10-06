@@ -78,12 +78,16 @@ fn encode(values: impl Iterator<Item = f64>, dtype: &str) -> Vec<u8> {
 fn decode(bytes: &[u8], dtype: &str) -> Vec<f64> {
     match dtype {
         "float64" => bytes
-            .chunks_exact(8)
-            .map(|b| f64::from_le_bytes(b.try_into().unwrap()))
+            .as_chunks::<8>()
+            .0
+            .iter()
+            .map(|b| f64::from_le_bytes(*b))
             .collect(),
         "float32" => bytes
-            .chunks_exact(4)
-            .map(|b| f64::from(f32::from_le_bytes(b.try_into().unwrap())))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|b| f64::from(f32::from_le_bytes(*b)))
             .collect(),
         other => panic!("unknown dtype {other}"),
     }
@@ -203,13 +207,17 @@ pub fn load<const N: usize, const M: usize>(id: &str) -> (Model, Vec<Scenario<N,
             truth: truth.as_ref().map_or_else(Vec::new, |t| {
                 let run_values = &t[run * model.steps * N..(run + 1) * model.steps * N];
                 run_values
-                    .chunks_exact(N)
-                    .map(SVector::from_column_slice)
+                    .as_chunks::<N>()
+                    .0
+                    .iter()
+                    .map(|c| SVector::from(*c))
                     .collect()
             }),
             zs: zs[run * model.steps * M..(run + 1) * model.steps * M]
-                .chunks_exact(M)
-                .map(SVector::from_column_slice)
+                .as_chunks::<M>()
+                .0
+                .iter()
+                .map(|c| SVector::from(*c))
                 .collect(),
         })
         .collect();
