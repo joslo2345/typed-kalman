@@ -118,6 +118,17 @@ CI facts learned the hard way:
 - **Results on the development laptop**, against `adskalman-joseph`: S2 f64 3% faster, S1 1% slower, S5 3% slower, **S2 f32 about 10% slower** (consistent across runs and not yet explained; an isolated f32 step in a side-by-side benchmark was at parity), and **flash 14% smaller** (13,988 vs 16,276 bytes). Accuracy, NEES and allocations are identical; on S4 both survive 1M steps. "Ours vs best other" compares with `adskalman-optimal`, which is fastest but fails S4 at step 0.
 - Measure performance changes **side by side in one benchmark binary**, with the variants as const-generic flags of a single function. Sequential A/B runs on the laptop drift by ±5–15%, and twice gave the opposite conclusion (inverting S looked 2% slower sequentially but was 8% faster side by side).
 
+## Releasing
+
+Publishing to crates.io is public and permanent (versions can be yanked, never deleted), so it only happens on the user's explicit go-ahead.
+
+1. Make sure CI is green on `main`, and `cargo publish --dry-run` passes. The package is about 55 files and 67 KiB compressed; `exclude` in `Cargo.toml` keeps the 14.5 MB of scenario files out.
+2. Move the `CHANGELOG.md` entries from `[Unreleased]` into the new version. `cargo release <version>` (configured in `release.toml`) does this, bumps the version, commits and tags. It's a preview unless you pass `--execute`.
+3. `cargo publish`. It needs a crates.io token (`cargo login`).
+4. The guide says to announce on the Rust users forum, the Rust Embedded community and r/rust. Draft the posts for the user; never post them yourself.
+
+Status of 0.1.0: prepared (changelog, metadata, release config, dry run passing), not published. `Cargo.toml` has no `repository` URL yet because the repo has no remote; add it once there is one.
+
 ## Resolved inconsistencies in the guide
 
 - The guide names the benchmark both `filters` (`Cargo.toml`) and `compare` (Step 8 pipeline). `benches/filters.rs` is the Step 7 speed comparison. Step 8's `benches/compare.rs` needs its own `[[bench]]` entry with `harness = false`.
