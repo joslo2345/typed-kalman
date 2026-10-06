@@ -3,6 +3,8 @@
 
 //! Type-safe Kalman filters for desktop and embedded targets.
 
+#[cfg(feature = "autodiff")]
+pub mod autodiff;
 pub mod diagnostics;
 pub mod ekf;
 pub mod error;
