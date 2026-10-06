@@ -104,7 +104,7 @@ struct ReadmeDoctests;
 pub use ekf::Ekf;
 pub use error::KalmanError;
 pub use linear::LinearKf;
-pub use model::{MeasurementJacobian, MeasurementModel, ProcessJacobian, ProcessModel};
+pub use model::{wrap_angle, MeasurementJacobian, MeasurementModel, ProcessJacobian, ProcessModel};
 pub use scalar::Float;
 pub use smoother::{Estimate, RtsStep};
 pub use sqrt_kf::SqrtKf;

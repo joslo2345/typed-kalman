@@ -114,11 +114,14 @@ impl<const N: usize, T: Float> SqrtUkf<N, T> {
 
         let w = &self.weights;
         let points = SigmaPoints::from_factor(&self.x, &self.s, w);
-        let measured = points.map(|s| model.measure(s));
-        let z_pred = measured.mean(w);
-        let s_z = weighted_factor(&measured, &z_pred, r_sqrt, w)
-            .ok_or(KalmanError::SingularInnovation)?;
-        let p_xz = points.cross_covariance(&self.x, &measured, &z_pred, w);
+        // Measurement deviations go through the model's residual, so wrapped quantities work.
+        let (z_pred, dz) = points
+            .map(|s| model.measure(s))
+            .residual_moments(w, |a, b| model.residual(a, b));
+        let zero_z = SVector::<T, M>::zeros();
+        let s_z =
+            weighted_factor(&dz, &zero_z, r_sqrt, w).ok_or(KalmanError::SingularInnovation)?;
+        let p_xz = points.cross_covariance(&self.x, &dz, &zero_z, w);
 
         // K = Pxz (Sz Szᵀ)⁻¹, computed as (Sz⁻ᵀ Sz⁻¹ Pxzᵀ)ᵀ with two triangular solves.
         let k = s_z
@@ -126,7 +129,7 @@ impl<const N: usize, T: Float> SqrtUkf<N, T> {
             .and_then(|t| s_z.tr_solve_lower_triangular(&t))
             .ok_or(KalmanError::SingularInnovation)?
             .transpose();
-        let y = z - z_pred;
+        let y = model.residual(z, &z_pred);
         let whitened = s_z
             .solve_lower_triangular(&y)
             .ok_or(KalmanError::SingularInnovation)?;
@@ -137,7 +140,7 @@ impl<const N: usize, T: Float> SqrtUkf<N, T> {
         // updates only. The textbook P - (K Sz)(K Sz)ᵀ needs downdates, which cancel
         // catastrophically when a precise measurement shrinks the covariance by more than the
         // precision can resolve.
-        let corrected = points.corrected_deviations(&self.x, &measured, &z_pred, &k);
+        let corrected = points.corrected_deviations(&self.x, &dz, &zero_z, &k);
         let s = weighted_factor(&corrected, &SVector::zeros(), &(k * r_sqrt), w)
             .ok_or(KalmanError::CovarianceNotPositiveDefinite)?;
 

@@ -25,6 +25,24 @@ pub trait ProcessJacobian<const N: usize, T: Float = f64>: ProcessModel<N, T> {
 pub trait MeasurementModel<const N: usize, const M: usize, T: Float = f64> {
     /// Returns the measurement expected for the state `x`.
     fn measure(&self, x: &SVector<T, N>) -> SVector<T, M>;
+
+    /// Returns the difference `a - b` between two measurements.
+    ///
+    /// The default subtracts. Override it when a component wraps around, such as a bearing:
+    /// the difference between 179° and -179° is 2°, not 358°. [`wrap_angle`] does that for
+    /// radians. Every filter computes its innovation with this, and the UKFs also use it to
+    /// average and spread their sigma points, so wrapped measurements work near the seam.
+    fn residual(&self, a: &SVector<T, M>, b: &SVector<T, M>) -> SVector<T, M> {
+        a - b
+    }
+}
+
+/// Wraps an angle in radians into `[-π, π)`.
+///
+/// For use in [`MeasurementModel::residual`] when a measurement component is an angle.
+pub fn wrap_angle<T: Float>(angle: T) -> T {
+    let two_pi = T::two_pi();
+    angle - two_pi * ((angle + T::pi()) / two_pi).floor()
 }
 
 /// A [`MeasurementModel`] that can also supply its Jacobian.

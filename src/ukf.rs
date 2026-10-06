@@ -153,6 +153,26 @@ impl<const N: usize, T: Float> SigmaPoints<N, N, T> {
 }
 
 impl<const D: usize, const N: usize, T: Float> SigmaPoints<D, N, T> {
+    /// Returns the weighted mean and the deviations from it, with differences taken by
+    /// `residual` instead of subtraction.
+    ///
+    /// The mean is the center point plus the weighted residuals of the others from it, which
+    /// equals the plain weighted mean (the weights sum to one) but stays correct for quantities
+    /// that wrap around, such as angles near ±π. The deviations have mean zero.
+    pub(crate) fn residual_moments(
+        &self,
+        w: &Weights<T>,
+        residual: impl Fn(&SVector<T, D>, &SVector<T, D>) -> SVector<T, D>,
+    ) -> (SVector<T, D>, Self) {
+        let mut offset = SVector::<T, D>::zeros();
+        for i in 0..N {
+            offset += residual(&self.plus.column(i).into_owned(), &self.center)
+                + residual(&self.minus.column(i).into_owned(), &self.center);
+        }
+        let mean = self.center + offset * w.rest;
+        (mean, self.map(|p| residual(p, &mean)))
+    }
+
     /// Passes every point through `g`.
     pub(crate) fn map<const E: usize>(
         &self,
@@ -291,20 +311,23 @@ impl<const N: usize, T: Float> Ukf<N, T> {
 
         let w = &self.weights;
         let points = SigmaPoints::draw(&self.x, &self.p, w)?;
-        let measured = points.map(|s| model.measure(s));
-        let z_pred = measured.mean(w);
-        let s = measured.cross_covariance(&z_pred, &measured, &z_pred, w) + r;
+        // Measurement deviations go through the model's residual, so wrapped quantities work.
+        let (z_pred, dz) = points
+            .map(|s| model.measure(s))
+            .residual_moments(w, |a, b| model.residual(a, b));
+        let zero_z = SVector::<T, M>::zeros();
+        let s = dz.cross_covariance(&zero_z, &dz, &zero_z, w) + r;
         let s_chol = Cholesky::new(s).ok_or(KalmanError::SingularInnovation)?;
-        let p_xz = points.cross_covariance(&self.x, &measured, &z_pred, w);
+        let p_xz = points.cross_covariance(&self.x, &dz, &zero_z, w);
 
         // K = Pxz S⁻¹, computed as (S⁻¹ Pxzᵀ)ᵀ since S is symmetric.
         let k = s_chol.solve(&p_xz.transpose()).transpose();
-        let y = z - z_pred;
+        let y = model.residual(z, &z_pred);
         let x = self.x + k * y;
         let nis = y.dot(&s_chol.solve(&y));
 
         // Joseph form over the sigma points (see `SigmaPoints::corrected_deviations`).
-        let corrected = points.corrected_deviations(&self.x, &measured, &z_pred, &k);
+        let corrected = points.corrected_deviations(&self.x, &dz, &zero_z, &k);
         let zero = SVector::<T, N>::zeros();
         let p = symmetrize(
             corrected.cross_covariance(&zero, &corrected, &zero, w) + k * r * k.transpose(),

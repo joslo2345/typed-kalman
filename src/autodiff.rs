@@ -322,6 +322,12 @@ pub trait AutoProcess<const N: usize> {
 pub trait AutoMeasurement<const N: usize, const M: usize> {
     /// Returns the measurement expected for the state `x`.
     fn measure<T: Real>(&self, x: &SVector<T, N>) -> SVector<T, M>;
+
+    /// Returns the difference `a - b` between two measurements; see
+    /// [`MeasurementModel::residual`]. Override it for wrapped components such as bearings.
+    fn residual(&self, a: &SVector<f64, M>, b: &SVector<f64, M>) -> SVector<f64, M> {
+        a - b
+    }
 }
 
 /// Wraps an [`AutoProcess`] or [`AutoMeasurement`] model, implementing the filter model traits
@@ -356,6 +362,10 @@ impl<Model: AutoMeasurement<N, M>, const N: usize, const M: usize> MeasurementMo
 {
     fn measure(&self, x: &SVector<f64, N>) -> SVector<f64, M> {
         self.0.measure(x)
+    }
+
+    fn residual(&self, a: &SVector<f64, M>, b: &SVector<f64, M>) -> SVector<f64, M> {
+        self.0.residual(a, b)
     }
 }
 

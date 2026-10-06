@@ -22,6 +22,9 @@ All notable changes to this crate are documented here. The format follows
   checks; every `update` returns the NIS.
 - `autodiff` feature: exact Jacobians from dual numbers, through `AutoProcess`,
   `AutoMeasurement` and the `AutoDiff` wrapper.
+- `MeasurementModel::residual` and `wrap_angle`: wrapped measurements such as bearings work
+  across ±π. The EKF uses the residual for its innovation; the UKFs also use it to average and
+  spread their sigma points.
 - `no_std` support with no heap allocation. Bad inputs return a `KalmanError` and leave the
   filter unchanged instead of panicking.
 - Examples: `constant_velocity` and `imu_attitude` (needs the `autodiff` feature).

@@ -48,7 +48,7 @@ impl<const N: usize, T: Float> Ekf<N, T> {
         r: &SMatrix<T, M, M>,
     ) -> Result<T, KalmanError> {
         let h = model.jacobian(&self.x);
-        let y = z - model.measure(&self.x);
+        let y = model.residual(z, &model.measure(&self.x));
         let corrected = update::joseph(&self.x, &self.p, &h, &y, r)?;
         self.x = corrected.x;
         self.p = corrected.p;
