@@ -66,7 +66,7 @@ impl<const N: usize> Default for LinearKf<N> {
 mod tests {
     use super::*;
     use crate::ekf::Ekf;
-    use crate::model::{MeasurementModel, ProcessModel};
+    use crate::model::{MeasurementJacobian, MeasurementModel, ProcessJacobian, ProcessModel};
     use nalgebra::{Matrix1, Matrix1x2, Matrix2, Matrix2x4, Matrix4, Vector1, Vector2, Vector4};
 
     #[test]
@@ -133,6 +133,9 @@ mod tests {
         fn predict(&self, x: &Vector4<f64>, _dt: f64) -> Vector4<f64> {
             self.f * x
         }
+    }
+
+    impl ProcessJacobian<4> for Linear {
         fn jacobian(&self, _x: &Vector4<f64>, _dt: f64) -> Matrix4<f64> {
             self.f
         }
@@ -142,6 +145,9 @@ mod tests {
         fn measure(&self, x: &Vector4<f64>) -> Vector2<f64> {
             self.h * x
         }
+    }
+
+    impl MeasurementJacobian<4, 2> for Linear {
         fn jacobian(&self, _x: &Vector4<f64>) -> Matrix2x4<f64> {
             self.h
         }

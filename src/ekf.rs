@@ -3,7 +3,7 @@
 use nalgebra::{SMatrix, SVector};
 
 use crate::error::KalmanError;
-use crate::model::{MeasurementModel, ProcessModel};
+use crate::model::{MeasurementJacobian, ProcessJacobian};
 use crate::update::{self, symmetrize};
 
 /// An extended Kalman filter over an `N`-dimensional state.
@@ -30,7 +30,7 @@ impl<const N: usize> Ekf<N> {
     }
 
     /// Propagates the state and covariance through `model` with process noise `q`.
-    pub fn predict<P: ProcessModel<N>>(&mut self, model: &P, q: &SMatrix<f64, N, N>, dt: f64) {
+    pub fn predict<P: ProcessJacobian<N>>(&mut self, model: &P, q: &SMatrix<f64, N, N>, dt: f64) {
         let f = model.jacobian(&self.x, dt);
         self.x = model.predict(&self.x, dt);
         self.p = symmetrize(f * self.p * f.transpose() + q);
@@ -40,7 +40,7 @@ impl<const N: usize> Ekf<N> {
     /// Joseph-form covariance update.
     ///
     /// Returns the normalized innovation squared (NIS). On error the filter is unchanged.
-    pub fn update<H: MeasurementModel<N, M>, const M: usize>(
+    pub fn update<H: MeasurementJacobian<N, M>, const M: usize>(
         &mut self,
         model: &H,
         z: &SVector<f64, M>,
@@ -58,6 +58,7 @@ impl<const N: usize> Ekf<N> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::{MeasurementModel, ProcessModel};
     use nalgebra::{Matrix1, Matrix2, Vector1, Vector2};
 
     /// Position and velocity, moving at constant velocity.
@@ -67,6 +68,9 @@ mod tests {
         fn predict(&self, x: &Vector2<f64>, dt: f64) -> Vector2<f64> {
             self.jacobian(x, dt) * x
         }
+    }
+
+    impl ProcessJacobian<2> for ConstantVelocity {
         fn jacobian(&self, _x: &Vector2<f64>, dt: f64) -> Matrix2<f64> {
             Matrix2::new(1.0, dt, 0.0, 1.0)
         }
@@ -79,6 +83,9 @@ mod tests {
         fn measure(&self, x: &Vector2<f64>) -> Vector1<f64> {
             Vector1::new(x[0])
         }
+    }
+
+    impl MeasurementJacobian<2, 1> for Position {
         fn jacobian(&self, _x: &Vector2<f64>) -> nalgebra::Matrix1x2<f64> {
             nalgebra::Matrix1x2::new(1.0, 0.0)
         }

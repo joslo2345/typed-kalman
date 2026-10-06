@@ -47,6 +47,7 @@ pub(crate) fn symmetrize<const N: usize>(p: SMatrix<f64, N, N>) -> SMatrix<f64, 
     (p + p.transpose()) * 0.5
 }
 
-fn all_finite(values: &[f64]) -> bool {
+/// Returns whether every value is neither NaN nor infinite.
+pub(crate) fn all_finite(values: &[f64]) -> bool {
     values.iter().all(|v| v.is_finite())
 }

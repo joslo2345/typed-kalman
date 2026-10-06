@@ -16,4 +16,5 @@ mod update;
 pub use ekf::Ekf;
 pub use error::KalmanError;
 pub use linear::LinearKf;
-pub use model::{MeasurementModel, ProcessModel};
+pub use model::{MeasurementJacobian, MeasurementModel, ProcessJacobian, ProcessModel};
+pub use ukf::{Ukf, UkfParams};
