@@ -7,6 +7,11 @@ pub mod diagnostics;
 pub mod ekf;
 pub mod error;
 pub mod linear;
+pub mod model;
 pub mod smoother;
 pub mod sqrt_ukf;
 pub mod ukf;
+
+pub use ekf::Ekf;
+pub use error::KalmanError;
+pub use model::{MeasurementModel, ProcessModel};
