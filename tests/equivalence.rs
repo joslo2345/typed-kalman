@@ -51,11 +51,11 @@ fn optimal_gain_methods_agree_on_a_well_conditioned_problem() {
     // On an easy problem, adskalman's faster covariance updates should also agree with our
     // Joseph form. Only Joseph form stays this close on hard problems.
     let sc = scenarios::constant_velocity(1000, 7);
-    let models = Models::new(&sc);
+    let models = Models::<4, 2>::new(&sc);
     for method in [Method::OptimalKalman, Method::OptimalKalmanForcedSymmetric] {
         let mut ours = LinearKf::from_scenario(&sc);
         let mut zs = sc.zs.iter();
-        models.run(&sc, method, |theirs| {
+        models.run(&sc.zs, method, |theirs| {
             ours.predict(&sc.f, &sc.q);
             ours.update(&sc.h, zs.next().unwrap(), &sc.r).unwrap();
             approx::assert_relative_eq!(ours.state(), theirs.state(), epsilon = 1e-9);
@@ -66,7 +66,7 @@ fn optimal_gain_methods_agree_on_a_well_conditioned_problem() {
 #[test]
 fn smoother_matches_adskalman() {
     let sc = scenarios::constant_velocity(300, 3);
-    let theirs = Models::new(&sc).smooth(&sc);
+    let theirs = Models::<4, 2>::new(&sc).smooth(&sc.zs);
 
     let mut kf = LinearKf::from_scenario(&sc);
     let history: Vec<RtsStep<4>> = sc

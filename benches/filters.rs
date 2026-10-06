@@ -38,7 +38,7 @@ fn run_ours_sqrt(
 
 fn compare(c: &mut Criterion) {
     let sc = scenarios::constant_velocity(1000, 0);
-    let models = Models::new(&sc);
+    let models = Models::<4, 2>::new(&sc);
     let mut group = c.benchmark_group("constant_velocity_1000_steps");
     group.throughput(Throughput::Elements(sc.zs.len() as u64));
 
@@ -60,7 +60,7 @@ fn compare(c: &mut Criterion) {
     ] {
         group.bench_function(name, |b| {
             b.iter(|| {
-                models.run(black_box(&sc), method, |e| {
+                models.run(black_box(&sc.zs), method, |e| {
                     black_box(e);
                 })
             })

@@ -1,1 +1,4 @@
 /target
+
+# Only numbers from the dedicated benchmark machine are published; commit them with -f.
+/results/results.csv

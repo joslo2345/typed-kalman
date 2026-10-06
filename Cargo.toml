@@ -27,6 +27,10 @@ serde_json = "1"
 name = "filters"
 harness = false
 
+[[bench]]
+name = "compare"
+harness = false
+
 # The stability tests run a million filter steps; unoptimized nalgebra makes that take minutes.
 # Debug assertions and overflow checks stay on.
 [profile.test]
