@@ -15,6 +15,10 @@ COMMIT="${ENV%%,*}"
 
 cargo build --release --quiet
 SIZE="$(rustc --print sysroot)/lib/rustlib/$(rustc -vV | sed -n 's/host: //p')/bin/llvm-size"
+if [ ! -x "$SIZE" ]; then
+  echo "error: llvm-size not found; install it with: rustup component add llvm-tools" >&2
+  exit 1
+fi
 ADSKALMAN_VERSION="$(grep -A1 '^name = "adskalman"$' Cargo.lock | sed -n 's/^version = "\(.*\)"$/\1/p')"
 
 section() { # <elf> <section name>: prints the section's size, or 0 if it's absent
