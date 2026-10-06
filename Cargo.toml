@@ -5,6 +5,10 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 description = "Type-safe, no_std Kalman filters: KF, EKF, UKF and smoothers"
 categories = ["mathematics", "science::robotics", "embedded", "no-std"]
+# Benchmark data and tooling stay in the repo; the scenario files alone exceed crates.io's limit.
+exclude = [
+    "tests/vectors/", "bench/", "results/", "scripts/", "CLAUDE.md", "kalman-rust-repo-guide.md",
+]
 
 [features]
 default = ["std"]

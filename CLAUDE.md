@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Current state
 
-`kalman-rust-repo-guide.md` is the design spec and build plan for the crate `kalman-rs` (crate import name `kalman_rs`). Treat it as the source of truth, and read the relevant section before implementing a step. Steps 1–4 (scaffold, layout, `Cargo.toml`, `lib.rs`) are done. The crate lives at the repo root, not in a `kalman-rs/` subdirectory. Step 5 is done: the model traits are in `src/model.rs` (not listed in the guide's layout), `KalmanError` is in `src/error.rs`, and `Ekf<N>` is implemented in `src/ekf.rs`. Step 6 items 1–2 are done: `LinearKf<N>` in `src/linear.rs` takes the F/H/Q/R matrices directly. Both filters share the private `update::joseph` function, which computes the result without modifying the filter so that errors leave the state unchanged. `Ukf<N>` (with `UkfParams`) is in `src/ukf.rs`, and `SqrtUkf<N>` is in `src/sqrt_ukf.rs`, which completes Step 6 item 3. The RTS smoother is in `src/smoother.rs` (`smooth`, `RtsStep`, `Estimate`), which completes Step 6 item 4. These types are re-exported from the crate root. `src/diagnostics.rs` (Step 6 item 5) has `nees`, `chi_squared_quantile` and `chi_squared_bounds`, and these stay under `kalman_rs::diagnostics`. Step 6 item 6 is in `src/autodiff.rs`, behind the `autodiff` feature and not re-exported at the root. Step 6 item 7 (generic scalar) is done, which completes Step 6. Step 7 is done: the integration tests under `tests/`, `benches/filters.rs`, and a square-root linear KF, `SqrtKf` (`src/sqrt_kf.rs`, not in the guide), added so the guide's full-range stability test can pass. Work continues with Step 8 (comparison numbers).
+`kalman-rust-repo-guide.md` is the design spec and build plan for the crate `kalman-rs` (crate import name `kalman_rs`). Treat it as the source of truth, and read the relevant section before implementing a step. Steps 1–4 (scaffold, layout, `Cargo.toml`, `lib.rs`) are done. The crate lives at the repo root, not in a `kalman-rs/` subdirectory. Step 5 is done: the model traits are in `src/model.rs` (not listed in the guide's layout), `KalmanError` is in `src/error.rs`, and `Ekf<N>` is implemented in `src/ekf.rs`. Step 6 items 1–2 are done: `LinearKf<N>` in `src/linear.rs` takes the F/H/Q/R matrices directly. Both filters share the private `update::joseph` function, which computes the result without modifying the filter so that errors leave the state unchanged. `Ukf<N>` (with `UkfParams`) is in `src/ukf.rs`, and `SqrtUkf<N>` is in `src/sqrt_ukf.rs`, which completes Step 6 item 3. The RTS smoother is in `src/smoother.rs` (`smooth`, `RtsStep`, `Estimate`), which completes Step 6 item 4. These types are re-exported from the crate root. `src/diagnostics.rs` (Step 6 item 5) has `nees`, `chi_squared_quantile` and `chi_squared_bounds`, and these stay under `kalman_rs::diagnostics`. Step 6 item 6 is in `src/autodiff.rs`, behind the `autodiff` feature and not re-exported at the root. Step 6 item 7 (generic scalar) is done, which completes Step 6. Step 7 is done: the integration tests under `tests/`, `benches/filters.rs`, and a square-root linear KF, `SqrtKf` (`src/sqrt_kf.rs`, not in the guide), added so the guide's full-range stability test can pass. Step 8 is done except for the parts that need things this repo doesn't have: a shared test-vectors repo (the scenarios live in `tests/vectors/` for now) and a board for `cycles_per_step` (the firmware writes it to `CYCLES_PER_STEP` for a probe to read). Work continues with Step 9 (CI).
 
 Dependency versions are newer than the ones in the guide: `nalgebra` 0.35 (which matches what `adskalman` 0.18 depends on, so their matrix types are compatible) and `criterion` 0.8 (use `std::hint::black_box` instead of `criterion::black_box`).
 
@@ -37,12 +37,11 @@ cargo build --target thumbv7em-none-eabihf --no-default-features --features auto
 
 cargo deny check                             # licenses and advisories
 
-# Benchmark comparison pipeline (from the repo root)
-ENV="$(git rev-parse --short HEAD),$(uname -m),$(uname -s),$(rustc --version | cut -d' ' -f2),$(date -I)"
-cargo bench --bench compare
-python scripts/criterion_to_csv.py "$ENV"
-cargo run --release --example accuracy -- "$ENV" >> results/results.csv
-python scripts/make_table.py results/results.csv kalman-rs
+# Comparison numbers: everything, about 4 minutes; prints the README table
+scripts/run_comparison.sh
+cargo bench --bench compare -- 'S2_KF_float32'   # one benchmark group
+cargo run --release --example generate_vectors   # rewrite tests/vectors/ (frozen: don't, once results exist)
+(cd bench/firmware && cargo build --release)     # firmware images; scripts/firmware_sizes.sh reports their sizes
 ```
 
 CI runs tests on stable, beta, and the MSRV, plus clippy, fmt, the thumbv7em `no_std` build, `cargo deny`, and `cargo doc`.
@@ -86,6 +85,12 @@ CI runs tests on stable, beta, and the MSRV, plus clippy, fmt, the thumbv7em `no
 - Results are appended to `results/results.csv` using the schema `library,library_version,scenario,filter,precision,metric,value,unit,commit,cpu,os,toolchain,date`. `make_table.py` writes the README table between `<!-- BENCH:START -->` and `<!-- BENCH:END -->`.
 - Benchmark `adskalman` with all three `CovarianceUpdateMethod`s. A feature a baseline lacks is reported as "n/a", never as a failure.
 - Embedded numbers come from a separate firmware crate in `bench/firmware` (DWT cycle counter, `cargo size`), with an identical build profile for each library.
+
+- `examples/accuracy.rs` prints the rmse, nees, max_abs_diff, steps_to_failure and heap_allocations rows. It has its own counting global allocator, which is fine because an example is its own binary. adskalman runs S3 as an EKF through `baseline::adskalman_ekf_s3`: its transition model predicts, then an observation model linearized at the prediction updates.
+- S5's NEES is about 9.9 against 15 degrees of freedom for every library. That's a single-run artifact, not inconsistency: yaw and some bias combinations are unobservable, so each run carries a few fixed χ²(1) draws from the prior. Over 100 seeds, per-run NEES ranges from 7.4 to 29.2, with a mean of 14.0. Use the 500-run tests in `tests/consistency.rs` for consistency claims.
+- `bench/firmware` is a standalone crate (its own `[workspace]`), built for an STM32F446RE (`memory.x`). Its `build.rs` turns S2's `model.json` and first 1,000 measurements into f32 constants, so both images carry identical data. `ram_bytes` (`.data` + `.bss`) counts only static RAM, which is 24 bytes for both; the filter state lives on the stack, which this metric doesn't measure.
+- **Results on the development laptop**, against `adskalman-joseph`: S2 f64 3% faster, S1 1% slower, S5 3% slower, **S2 f32 about 10% slower** (consistent across runs and not yet explained; an isolated f32 step in a side-by-side benchmark was at parity), and **flash 14% smaller** (13,988 vs 16,276 bytes). Accuracy, NEES and allocations are identical; on S4 both survive 1M steps. "Ours vs best other" compares with `adskalman-optimal`, which is fastest but fails S4 at step 0.
+- Measure performance changes **side by side in one benchmark binary**, with the variants as const-generic flags of a single function. Sequential A/B runs on the laptop drift by ±5–15%, and twice gave the opposite conclusion (inverting S looked 2% slower sequentially but was 8% faster side by side).
 
 ## Resolved inconsistencies in the guide
 

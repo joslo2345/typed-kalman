@@ -1,0 +1,32 @@
+# Firmware images that run only a Kalman filter on scenario S2, one per library, for the
+# flash_bytes, ram_bytes and cycles_per_step metrics. Both binaries share every line of code
+# except the filter, and build with the same profile, so size differences are the library's.
+#
+# Build with `cargo build --release` from this directory; scripts/firmware_sizes.sh does that
+# and reports the sizes.
+[package]
+name = "firmware"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# A standalone workspace, so the main crate's builds and tests never include it.
+[workspace]
+
+[dependencies]
+kalman-rs = { path = "../..", default-features = false }
+adskalman = { version = "0.18", default-features = false }
+nalgebra = { version = "0.35", default-features = false, features = ["libm"] }
+cortex-m = "0.7"
+cortex-m-rt = "0.7"
+panic-halt = "1"
+
+[build-dependencies]
+serde_json = "1"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+debug = false
+panic = "abort"
