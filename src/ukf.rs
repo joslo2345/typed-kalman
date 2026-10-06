@@ -111,6 +111,47 @@ impl<const N: usize, T: Float> SigmaPoints<N, N, T> {
     }
 }
 
+impl<const N: usize, T: Float> SigmaPoints<N, N, T> {
+    /// Returns the corrected deviations `(χᵢ - x) - K (ζᵢ - ẑ)`, which have mean zero.
+    ///
+    /// Their weighted covariance plus `K R Kᵀ` is the Joseph-form posterior covariance. That
+    /// equals `P - K S Kᵀ` exactly, but it is a sum of positive terms, so it can't lose
+    /// positive-definiteness through cancellation. Subtracting the means before applying the
+    /// gain also avoids differencing large absolute values.
+    pub(crate) fn corrected_deviations<const M: usize>(
+        &self,
+        mean: &SVector<T, N>,
+        measured: &SigmaPoints<M, N, T>,
+        measured_mean: &SVector<T, M>,
+        k: &SMatrix<T, N, M>,
+    ) -> Self {
+        let deviation = |x: SVector<T, N>, z: SVector<T, M>| (x - mean) - k * (z - measured_mean);
+        let mut plus = SMatrix::<T, N, N>::zeros();
+        let mut minus = SMatrix::<T, N, N>::zeros();
+        for i in 0..N {
+            plus.set_column(
+                i,
+                &deviation(
+                    self.plus.column(i).into_owned(),
+                    measured.plus.column(i).into_owned(),
+                ),
+            );
+            minus.set_column(
+                i,
+                &deviation(
+                    self.minus.column(i).into_owned(),
+                    measured.minus.column(i).into_owned(),
+                ),
+            );
+        }
+        Self {
+            center: deviation(self.center, measured.center),
+            plus,
+            minus,
+        }
+    }
+}
+
 impl<const D: usize, const N: usize, T: Float> SigmaPoints<D, N, T> {
     /// Passes every point through `g`.
     pub(crate) fn map<const E: usize>(
@@ -234,7 +275,8 @@ impl<const N: usize, T: Float> Ukf<N, T> {
         Ok(())
     }
 
-    /// Corrects the estimate with measurement `z` and measurement noise `r`.
+    /// Corrects the estimate with measurement `z` and measurement noise `r`, using a
+    /// Joseph-form covariance update over the sigma points.
     ///
     /// Returns the normalized innovation squared (NIS).
     pub fn update<H: MeasurementModel<N, M, T>, const M: usize>(
@@ -259,14 +301,20 @@ impl<const N: usize, T: Float> Ukf<N, T> {
         let k = s_chol.solve(&p_xz.transpose()).transpose();
         let y = z - z_pred;
         let x = self.x + k * y;
-        let p = symmetrize(self.p - k * s * k.transpose());
         let nis = y.dot(&s_chol.solve(&y));
+
+        // Joseph form over the sigma points (see `SigmaPoints::corrected_deviations`).
+        let corrected = points.corrected_deviations(&self.x, &measured, &z_pred, &k);
+        let zero = SVector::<T, N>::zeros();
+        let p = symmetrize(
+            corrected.cross_covariance(&zero, &corrected, &zero, w) + k * r * k.transpose(),
+        );
 
         if !all_finite(x.as_slice()) || !all_finite(p.as_slice()) || !nis.is_finite() {
             return Err(KalmanError::NumericalFailure);
         }
-        // P - K S Kᵀ can lose positive-definiteness in floating point. Reject it here so the
-        // next predict can always draw sigma points.
+        // Rounding can still leave P indefinite when it's very ill-conditioned. Reject it here
+        // so the next predict can always draw sigma points.
         if Cholesky::new(p).is_none() {
             return Err(KalmanError::CovarianceNotPositiveDefinite);
         }

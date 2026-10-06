@@ -18,7 +18,14 @@ nalgebra = { version = "0.35", default-features = false, features = ["libm"] }
 approx = "0.5"
 proptest = "1"
 criterion = "0.8"
+trybuild = "1"
+adskalman = "0.18"
 
 [[bench]]
 name = "filters"
 harness = false
+
+# The stability tests run a million filter steps; unoptimized nalgebra makes that take minutes.
+# Debug assertions and overflow checks stay on.
+[profile.test]
+opt-level = 3

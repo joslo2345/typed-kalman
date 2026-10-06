@@ -1,0 +1,15 @@
+error[E0308]: mismatched types
+  --> tests/compile_fail/mixed_precision.rs:10:19
+   |
+10 |     kf.update(&h, &z, &r).unwrap();
+   |        ------     ^^ expected `&Matrix<f64, Const<2>, Const<1>, ...>`, found `&Matrix<f32, Const<2>, Const<1>, ...>`
+   |        |
+   |        arguments to this method are incorrect
+   |
+   = note: expected reference `&Matrix<f64, nalgebra::Const<2>, nalgebra::Const<1>, ArrayStorage<f64, 2, 1>>`
+              found reference `&Matrix<f32, nalgebra::Const<2>, nalgebra::Const<1>, ArrayStorage<f32, 2, 1>>`
+note: method defined here
+  --> src/linear.rs
+   |
+   |     pub fn update<const M: usize>(
+   |            ^^^^^^

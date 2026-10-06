@@ -89,13 +89,16 @@ impl<const N: usize, T: Float> SqrtUkf<N, T> {
         if !all_finite(x.as_slice()) || !all_finite(s.as_slice()) {
             return Err(KalmanError::NumericalFailure);
         }
+        if is_singular(&s) {
+            return Err(KalmanError::CovarianceNotPositiveDefinite);
+        }
         self.x = x;
         self.s = s;
         Ok(())
     }
 
     /// Corrects the estimate with measurement `z` and measurement noise
-    /// `R = r_sqrt r_sqrtᵀ`.
+    /// `R = r_sqrt r_sqrtᵀ`, using a Joseph-form update of the covariance factor.
     ///
     /// Returns the normalized innovation squared (NIS).
     pub fn update<H: MeasurementModel<N, M, T>, const M: usize, const K: usize>(
@@ -129,21 +132,32 @@ impl<const N: usize, T: Float> SqrtUkf<N, T> {
         let nis = whitened.norm_squared();
         let x = self.x + k * y;
 
-        // P' = P - (K Sz)(K Sz)ᵀ, applied as one rank-one downdate per column of K Sz.
-        let u = k * s_z;
-        let mut s = self.s;
-        for j in 0..M {
-            downdate(&mut s, u.column(j).into_owned())
-                .ok_or(KalmanError::CovarianceNotPositiveDefinite)?;
-        }
+        // Joseph form over the sigma points (see `SigmaPoints::corrected_deviations`), built with rank-one
+        // updates only. The textbook P - (K Sz)(K Sz)ᵀ needs downdates, which cancel
+        // catastrophically when a precise measurement shrinks the covariance by more than the
+        // precision can resolve.
+        let corrected = points.corrected_deviations(&self.x, &measured, &z_pred, &k);
+        let s = weighted_factor(&corrected, &SVector::zeros(), &(k * r_sqrt), w)
+            .ok_or(KalmanError::CovarianceNotPositiveDefinite)?;
 
         if !all_finite(x.as_slice()) || !all_finite(s.as_slice()) || !nis.is_finite() {
             return Err(KalmanError::NumericalFailure);
+        }
+        if is_singular(&s) {
+            return Err(KalmanError::CovarianceNotPositiveDefinite);
         }
         self.x = x;
         self.s = s;
         Ok(nis)
     }
+}
+
+/// Returns whether lower-triangular `s` has a zero on its diagonal, so `S Sᵀ` is singular.
+///
+/// This happens in low precision when the sigma-point spread falls below the resolution of the
+/// state's magnitude, so every point rounds to the mean.
+fn is_singular<const N: usize, T: Float>(s: &SMatrix<T, N, N>) -> bool {
+    (0..N).any(|i| s[(i, i)] == T::zero())
 }
 
 /// Returns a lower-triangular `L` with `L Lᵀ` equal to the weighted covariance of `points`

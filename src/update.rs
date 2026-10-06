@@ -3,7 +3,7 @@
 use nalgebra::{Cholesky, SMatrix, SVector};
 
 use crate::error::KalmanError;
-use crate::scalar::{lit, Float};
+use crate::scalar::Float;
 
 /// A corrected state and covariance, plus the normalized innovation squared.
 pub(crate) struct Corrected<const N: usize, T: Float> {
@@ -43,9 +43,14 @@ pub(crate) fn joseph<const N: usize, const M: usize, T: Float>(
     Ok(Corrected { x, p, nis })
 }
 
-/// Returns `(p + pᵀ) / 2`, removing the asymmetry that rounding errors introduce.
-pub(crate) fn symmetrize<const N: usize, T: Float>(p: SMatrix<T, N, N>) -> SMatrix<T, N, N> {
-    (p + p.transpose()) * lit::<T>(0.5)
+/// Makes `p` exactly symmetric by copying its lower triangle over its upper one, removing the
+/// asymmetry that rounding errors introduce.
+///
+/// Mirroring is cheaper than averaging with the transpose, and Cholesky reads only the lower
+/// triangle anyway, so this keeps what the filter actually uses.
+pub(crate) fn symmetrize<const N: usize, T: Float>(mut p: SMatrix<T, N, N>) -> SMatrix<T, N, N> {
+    p.fill_upper_triangle_with_lower_triangle();
+    p
 }
 
 /// Returns whether every value is neither NaN nor infinite.

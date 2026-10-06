@@ -1,0 +1,19 @@
+error[E0277]: the trait bound `ThreeState: ProcessJacobian<4>` is not satisfied
+  --> tests/compile_fail/model_state_size_mismatch.rs:22:17
+   |
+22 |     ekf.predict(&ThreeState, &Matrix4::identity(), 0.1);
+   |         ------- ^^^^^^^^^^^ unsatisfied trait bound
+   |         |
+   |         required by a bound introduced by this call
+   |
+help: the trait `ProcessJacobian<4, f64>` is not implemented for `ThreeState`
+      but trait `ProcessJacobian<3, f64>` is implemented for it
+  --> tests/compile_fail/model_state_size_mismatch.rs:13:1
+   |
+13 | impl ProcessJacobian<3> for ThreeState {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required by a bound in `Ekf::<N, T>::predict`
+  --> src/ekf.rs
+   |
+   |     pub fn predict<P: ProcessJacobian<N, T>>(&mut self, model: &P, q: &SMatrix<T, N, N>, dt: T) {
+   |                       ^^^^^^^^^^^^^^^^^^^^^ required by this bound in `Ekf::<N, T>::predict`

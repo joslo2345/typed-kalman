@@ -1,0 +1,15 @@
+error[E0308]: mismatched types
+  --> tests/compile_fail/wrong_measurement_size.rs:10:19
+   |
+10 |     kf.update(&h, &z, &r).unwrap();
+   |        ------     ^^ expected `2`, found `3`
+   |        |
+   |        arguments to this method are incorrect
+   |
+   = note: expected reference `&Matrix<f64, nalgebra::Const<2>, nalgebra::Const<1>, ArrayStorage<f64, 2, 1>>`
+              found reference `&Matrix<f64, nalgebra::Const<3>, nalgebra::Const<1>, ArrayStorage<f64, 3, 1>>`
+note: method defined here
+  --> src/linear.rs
+   |
+   |     pub fn update<const M: usize>(
+   |            ^^^^^^
