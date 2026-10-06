@@ -6,6 +6,10 @@ All notable changes to this crate are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-06
+
+First release.
+
 ### Added
 
 - Filters, all generic over `f32` and `f64`, with dimensions as const generics:
@@ -30,3 +34,6 @@ All notable changes to this crate are documented here. The format follows
 - Examples: `constant_velocity` and `imu_attitude` (needs the `autodiff` feature).
 
 The minimum supported Rust version is 1.89.
+
+[Unreleased]: https://github.com/joslo2345/typed-kalman/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/joslo2345/typed-kalman/releases/tag/v0.1.0
