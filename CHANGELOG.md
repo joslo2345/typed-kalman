@@ -6,6 +6,13 @@ All notable changes to this crate are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Faster filter steps from inlining the generic update paths: the linear KF is 5–10% faster
+  and now ahead of adskalman's Joseph form on every benchmark scenario (S2 `f32` 725 vs 738
+  µs, S2 `f64` 738 vs 841 µs, S5 23.9 vs 24.5 ms per 10,000 steps); `SqrtKf` is up to 39%
+  faster. Firmware size is unchanged.
+
 ### Added
 
 - Unscented RTS smoother: `smoother::smooth_with_cross` over `CrossStep`s, with

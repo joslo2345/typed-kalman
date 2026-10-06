@@ -11,6 +11,7 @@ use crate::scalar::Float;
 
 /// Replaces lower-triangular `l` with the factor of `l lᵀ + c cᵀ` summed over the columns `c`
 /// of `columns`.
+#[inline]
 pub(crate) fn update_columns<const D: usize, const C: usize, T: Float>(
     l: &mut SMatrix<T, D, D>,
     columns: &SMatrix<T, D, C>,
@@ -24,6 +25,7 @@ pub(crate) fn update_columns<const D: usize, const C: usize, T: Float>(
 ///
 /// Unlike the textbook update, this works when `l` has zeros on its diagonal, so a factor can
 /// be built up from a zero matrix.
+#[inline]
 pub(crate) fn update<const D: usize, T: Float>(l: &mut SMatrix<T, D, D>, mut v: SVector<T, D>) {
     for k in 0..D {
         let (lkk, vk) = (l[(k, k)], v[k]);
@@ -44,6 +46,7 @@ pub(crate) fn update<const D: usize, T: Float>(l: &mut SMatrix<T, D, D>, mut v: 
 /// Replaces lower-triangular `l` with the factor of `l lᵀ - v vᵀ`, using hyperbolic rotations.
 ///
 /// Returns `None`, leaving `l` partially modified, if the result wouldn't be positive-definite.
+#[inline]
 pub(crate) fn downdate<const D: usize, T: Float>(
     l: &mut SMatrix<T, D, D>,
     mut v: SVector<T, D>,
@@ -69,6 +72,7 @@ pub(crate) fn downdate<const D: usize, T: Float>(
 ///
 /// This happens in low precision when the sigma-point spread falls below the resolution of the
 /// state's magnitude, so every point rounds to the mean.
+#[inline]
 pub(crate) fn is_singular<const N: usize, T: Float>(s: &SMatrix<T, N, N>) -> bool {
     (0..N).any(|i| s[(i, i)] == T::zero())
 }

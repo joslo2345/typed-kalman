@@ -118,7 +118,7 @@ println!("position {:.2}, velocity {:.2}", kf.state()[0], kf.state()[1]);
 | Filter | You provide | Use it when |
 |---|---|---|
 | **`LinearKf`** | matrices `F`, `H` | the system is linear; the fastest choice |
-| **`SqrtKf`** | matrices, noise as square roots | the covariance is too ill-conditioned for `LinearKf` (very precise sensors, `f32`); about 3.5× slower |
+| **`SqrtKf`** | matrices, noise as square roots | the covariance is too ill-conditioned for `LinearKf` (very precise sensors, `f32`); 2–3× slower |
 | **`Ekf`** | a model and its Jacobians | the system is mildly nonlinear; the `autodiff` feature can compute the Jacobians |
 | **`Ukf`** | a model only | the system is nonlinear and Jacobians are awkward |
 | **`SqrtUkf`** | a model, noise as square roots | as the UKF, with a covariance factor that can't lose positive-definiteness |

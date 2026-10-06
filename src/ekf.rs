@@ -31,6 +31,7 @@ impl<const N: usize, T: Float> Ekf<N, T> {
     }
 
     /// Propagates the state and covariance through `model` with process noise `q`.
+    #[inline]
     pub fn predict<P: ProcessJacobian<N, T>>(&mut self, model: &P, q: &SMatrix<T, N, N>, dt: T) {
         let f = model.jacobian(&self.x, dt);
         self.x = model.predict(&self.x, dt);
@@ -41,6 +42,7 @@ impl<const N: usize, T: Float> Ekf<N, T> {
     /// Joseph-form covariance update.
     ///
     /// Returns the normalized innovation squared (NIS). On error the filter is unchanged.
+    #[inline]
     pub fn update<H: MeasurementJacobian<N, M, T>, const M: usize>(
         &mut self,
         model: &H,

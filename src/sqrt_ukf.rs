@@ -75,6 +75,7 @@ impl<const N: usize, T: Float> SqrtUkf<N, T> {
 
     /// Propagates the state and its covariance factor through `model`, with process noise
     /// `Q = q_sqrt q_sqrtᵀ`.
+    #[inline]
     pub fn predict<P: ProcessModel<N, T>, const K: usize>(
         &mut self,
         model: &P,
@@ -104,6 +105,7 @@ impl<const N: usize, T: Float> SqrtUkf<N, T> {
     /// `R = r_sqrt r_sqrtᵀ`, using a Joseph-form update of the covariance factor.
     ///
     /// Returns the normalized innovation squared (NIS).
+    #[inline]
     pub fn update<H: MeasurementModel<N, M, T>, const M: usize, const K: usize>(
         &mut self,
         model: &H,
@@ -162,6 +164,7 @@ impl<const N: usize, T: Float> SqrtUkf<N, T> {
 /// around `mean`, plus `noise_sqrt noise_sqrtᵀ`.
 ///
 /// Returns `None` if a negative center weight would make the result indefinite.
+#[inline]
 fn weighted_factor<const D: usize, const N: usize, const K: usize, T: Float>(
     points: &SigmaPoints<D, N, T>,
     mean: &SVector<T, D>,

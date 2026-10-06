@@ -95,6 +95,7 @@ impl<const N: usize, T: Float> SigmaPoints<N, N, T> {
 
     /// Draws sigma points around mean `x` from a square root `l` of the covariance
     /// (any matrix with `P = L Lᵀ`).
+    #[inline]
     pub(crate) fn from_factor(x: &SVector<T, N>, l: &SMatrix<T, N, N>, w: &Weights<T>) -> Self {
         let l = l * w.gamma;
         let mut plus = SMatrix::<T, N, N>::zeros();
@@ -118,6 +119,7 @@ impl<const N: usize, T: Float> SigmaPoints<N, N, T> {
     /// equals `P - K S Kᵀ` exactly, but it is a sum of positive terms, so it can't lose
     /// positive-definiteness through cancellation. Subtracting the means before applying the
     /// gain also avoids differencing large absolute values.
+    #[inline]
     pub(crate) fn corrected_deviations<const M: usize>(
         &self,
         mean: &SVector<T, N>,
@@ -159,6 +161,7 @@ impl<const D: usize, const N: usize, T: Float> SigmaPoints<D, N, T> {
     /// The mean is the center point plus the weighted residuals of the others from it, which
     /// equals the plain weighted mean (the weights sum to one) but stays correct for quantities
     /// that wrap around, such as angles near ±π. The deviations have mean zero.
+    #[inline]
     pub(crate) fn residual_moments(
         &self,
         w: &Weights<T>,
@@ -174,6 +177,7 @@ impl<const D: usize, const N: usize, T: Float> SigmaPoints<D, N, T> {
     }
 
     /// Passes every point through `g`.
+    #[inline]
     pub(crate) fn map<const E: usize>(
         &self,
         g: impl Fn(&SVector<T, D>) -> SVector<T, E>,
@@ -193,6 +197,7 @@ impl<const D: usize, const N: usize, T: Float> SigmaPoints<D, N, T> {
 
     /// Returns the weighted cross-covariance between these points (around `mean`) and
     /// `other` (around `other_mean`).
+    #[inline]
     pub(crate) fn cross_covariance<const E: usize>(
         &self,
         mean: &SVector<T, D>,
@@ -267,6 +272,7 @@ impl<const N: usize, T: Float> Ukf<N, T> {
     }
 
     /// Propagates the state and covariance through `model` with process noise `q`.
+    #[inline]
     pub fn predict<P: ProcessModel<N, T>>(
         &mut self,
         model: &P,
@@ -279,6 +285,7 @@ impl<const N: usize, T: Float> Ukf<N, T> {
     /// Like [`predict`](Self::predict), and also returns the cross-covariance between the
     /// state before and after the prediction, which the unscented RTS smoother needs (see
     /// [`smooth_with_cross`](crate::smoother::smooth_with_cross)).
+    #[inline]
     pub fn predict_with_cross<P: ProcessModel<N, T>>(
         &mut self,
         model: &P,
@@ -290,6 +297,7 @@ impl<const N: usize, T: Float> Ukf<N, T> {
 
     /// The prediction behind both public methods. With `CROSS` off, the cross-covariance is
     /// skipped (and zero is returned), so a plain predict pays nothing for it.
+    #[inline]
     fn predict_impl<P: ProcessModel<N, T>, const CROSS: bool>(
         &mut self,
         model: &P,
@@ -325,6 +333,7 @@ impl<const N: usize, T: Float> Ukf<N, T> {
     /// Joseph-form covariance update over the sigma points.
     ///
     /// Returns the normalized innovation squared (NIS).
+    #[inline]
     pub fn update<H: MeasurementModel<N, M, T>, const M: usize>(
         &mut self,
         model: &H,

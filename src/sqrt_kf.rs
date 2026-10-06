@@ -57,6 +57,7 @@ impl<const N: usize, T: Float> SqrtKf<N, T> {
     /// as exact, so the covariance factor is the same as for [`predict`](Self::predict).
     ///
     /// Returns [`KalmanError::InvalidInput`] if `B u` isn't finite.
+    #[inline]
     pub fn predict_with_input<const U: usize, const K: usize>(
         &mut self,
         f: &SMatrix<T, N, N>,
@@ -76,6 +77,7 @@ impl<const N: usize, T: Float> SqrtKf<N, T> {
 
     /// Propagates the state with transition matrix `f` and process noise
     /// `Q = q_sqrt q_sqrtᵀ`.
+    #[inline]
     pub fn predict<const K: usize>(
         &mut self,
         f: &SMatrix<T, N, N>,
@@ -102,6 +104,7 @@ impl<const N: usize, T: Float> SqrtKf<N, T> {
     /// noise `R = r_sqrt r_sqrtᵀ`, using the Joseph form of the factor update.
     ///
     /// Returns the normalized innovation squared (NIS).
+    #[inline]
     pub fn update<const M: usize, const K: usize>(
         &mut self,
         h: &SMatrix<T, M, N>,

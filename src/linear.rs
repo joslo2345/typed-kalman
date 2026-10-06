@@ -33,6 +33,7 @@ impl<const N: usize, T: Float> LinearKf<N, T> {
     }
 
     /// Propagates the state with transition matrix `f` and process noise `q`.
+    #[inline]
     pub fn predict(&mut self, f: &SMatrix<T, N, N>, q: &SMatrix<T, N, N>) {
         self.x = f * self.x;
         self.p = symmetrize(f * self.p * f.transpose() + q);
@@ -41,6 +42,7 @@ impl<const N: usize, T: Float> LinearKf<N, T> {
     /// Propagates the state with transition matrix `f`, a known control input `u` entering
     /// through `b`, and process noise `q`: `x = F x + B u`. The input is treated as exact, so
     /// the covariance is the same as for [`predict`](Self::predict).
+    #[inline]
     pub fn predict_with_input<const U: usize>(
         &mut self,
         f: &SMatrix<T, N, N>,
@@ -56,6 +58,7 @@ impl<const N: usize, T: Float> LinearKf<N, T> {
     /// noise `r`, using the Joseph-form covariance update.
     ///
     /// Returns the normalized innovation squared (NIS). On error the filter is unchanged.
+    #[inline]
     pub fn update<const M: usize>(
         &mut self,
         h: &SMatrix<T, M, N>,

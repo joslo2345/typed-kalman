@@ -16,6 +16,7 @@ pub(crate) struct Corrected<const N: usize, T: Float> {
 /// using the Joseph-form covariance update.
 ///
 /// Does not modify anything, so callers can keep their state unchanged on error.
+#[inline]
 pub(crate) fn joseph<const N: usize, const M: usize, T: Float>(
     x: &SVector<T, N>,
     p: &SMatrix<T, N, N>,
@@ -51,6 +52,7 @@ pub(crate) fn joseph<const N: usize, const M: usize, T: Float>(
 ///
 /// Mirroring is cheaper than averaging with the transpose, and Cholesky reads only the lower
 /// triangle anyway, so this keeps what the filter actually uses.
+#[inline]
 pub(crate) fn symmetrize<const N: usize, T: Float>(mut p: SMatrix<T, N, N>) -> SMatrix<T, N, N> {
     p.fill_upper_triangle_with_lower_triangle();
     p
@@ -60,6 +62,7 @@ pub(crate) fn symmetrize<const N: usize, T: Float>(mut p: SMatrix<T, N, N>) -> S
 ///
 /// Folds over every value instead of stopping at the first bad one, which lets the compiler
 /// vectorize it; values are almost always finite, so early exit buys nothing.
+#[inline]
 pub(crate) fn all_finite<T: Float>(values: &[T]) -> bool {
     values.iter().fold(true, |ok, v| ok & v.is_finite())
 }

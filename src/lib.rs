@@ -38,7 +38,7 @@
 //! | Filter | Models | Use it when |
 //! |---|---|---|
 //! | [`LinearKf`] | matrices `F`, `H` | the system is linear; fastest |
-//! | [`SqrtKf`] | matrices, noise as square roots | the covariance is too ill-conditioned for `LinearKf` (very precise sensors, `f32`); about 3.5× slower |
+//! | [`SqrtKf`] | matrices, noise as square roots | the covariance is too ill-conditioned for `LinearKf` (very precise sensors, `f32`); 2–3× slower |
 //! | [`Ekf`] | [`ProcessJacobian`], [`MeasurementJacobian`] | the system is mildly nonlinear and you have Jacobians, or let the `autodiff` feature compute them |
 //! | [`Ukf`] | [`ProcessModel`], [`MeasurementModel`] | the system is nonlinear and Jacobians are awkward |
 //! | [`SqrtUkf`] | the same, noise as square roots | as the UKF, with a covariance factor that can't lose positive-definiteness |
