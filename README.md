@@ -250,6 +250,13 @@ _Not yet measured on the benchmark machine._
 | Angle wrapping for residuals (bearings near ±π) | ✅ Done: override `MeasurementModel::residual`, with `wrap_angle` |
 | `autodiff` in `f32` | ✅ Done: implement `AutoProcess<N, f32>` / `AutoMeasurement<N, M, f32>` |
 
+<a id="contributing"></a>
+## 🤝 Contributing
+
+Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the checks to
+run and the ground rules: never panic on data, never allocate, and work without `std` in both
+`f32` and `f64`.
+
 <a id="license"></a>
 ## 📄 License
 

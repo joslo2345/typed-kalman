@@ -1,0 +1,42 @@
+name: Bug report
+description: Something doesn't work, panics, gives wrong numbers, or doesn't compile.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you expected, and what happened instead. Include error messages.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: The smallest code that shows the problem, ideally with the model matrices or the measurements that trigger it.
+      render: rust
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: typed-kalman version
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: filter
+    attributes:
+      label: Filter
+      multiple: true
+      options: [LinearKf, SqrtKf, Ekf, Ukf, SqrtUkf, Smoother, Diagnostics, autodiff, Other]
+  - type: dropdown
+    id: precision
+    attributes:
+      label: Precision
+      options: [f64, f32]
+  - type: input
+    id: env
+    attributes:
+      label: Rust version, target, and features
+      placeholder: "rustc 1.95.0, thumbv7em-none-eabihf, default-features = false"

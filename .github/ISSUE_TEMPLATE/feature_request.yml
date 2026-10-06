@@ -1,0 +1,23 @@
+name: Feature request
+description: A filter, model, or API you'd like.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The estimation problem and what gets in your way today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would help?
+      description: The API or behaviour you have in mind, if any. A code sketch is great.
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Does it need to run
+      options:
+        - label: without `std` (bare metal)
+        - label: in `f32`
