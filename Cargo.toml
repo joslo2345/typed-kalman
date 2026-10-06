@@ -11,7 +11,8 @@ readme = "README.md"
 documentation = "https://docs.rs/typed-kalman"
 # Benchmark data and tooling stay in the repo; the scenario files alone exceed crates.io's limit.
 exclude = [
-    "tests/vectors/", "bench/", "results/", "scripts/", "CLAUDE.md", "kalman-rust-repo-guide.md",
+    "tests/vectors/", "bench/", "results/", "scripts/", "docs/", "CLAUDE.md",
+    "kalman-rust-repo-guide.md",
 ]
 
 [package.metadata.docs.rs]
