@@ -133,7 +133,7 @@ Publishing to crates.io is public and permanent (versions can be yanked, never d
 3. `cargo publish`. It needs a crates.io token (`cargo login`).
 4. The guide says to announce on the Rust users forum, the Rust Embedded community and r/rust. Draft the posts for the user; never post them yourself.
 
-Status: **0.1.0 is published** (crates.io, 2026-10-06), tagged `v0.1.0` at `11f7ad1` with a GitHub release. The repository is https://github.com/joslo2345/typed-kalman (public). Its secret scanning, push protection and Dependabot alerts are on. Announcement drafts are in `docs/announcement-drafts.md`; the user posts them. crates.io requires a verified email on the publishing account (the first attempt failed without one).
+Status: **0.1.1 is the latest release** (crates.io, 2026-10-06, tagged `v0.1.1` at `067cafd`); 0.1.0 was tagged `v0.1.0` at `11f7ad1`. Both have GitHub releases. A version bump must also update `bench/firmware/Cargo.lock` (`cargo update -p typed-kalman` there), because CI builds the firmware with `--locked`. Wait for CI to pass on the release commit before `cargo publish`. The repository is https://github.com/joslo2345/typed-kalman (public). Its secret scanning, push protection and Dependabot alerts are on. Announcement drafts are in `docs/announcement-drafts.md`; the user posts them. crates.io requires a verified email on the publishing account (the first attempt failed without one).
 
 ## Resolved inconsistencies in the guide
 
