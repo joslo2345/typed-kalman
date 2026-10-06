@@ -6,6 +6,8 @@ All notable changes to this crate are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-06
+
 ### Changed
 
 - Faster filter steps from inlining the generic update paths: the linear KF is 5–10% faster
@@ -54,5 +56,6 @@ First release.
 
 The minimum supported Rust version is 1.89.
 
-[Unreleased]: https://github.com/joslo2345/typed-kalman/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/joslo2345/typed-kalman/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/joslo2345/typed-kalman/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/joslo2345/typed-kalman/releases/tag/v0.1.0
