@@ -29,6 +29,11 @@ for pair in "fw_kalman_rs:kalman-rs:$COMMIT" "fw_adskalman:adskalman-joseph:$ADS
   rodata=$(section "$elf" .rodata)
   data=$(section "$elf" .data)
   bss=$(section "$elf" .bss)
+  # An image without code means the linker script was missing and everything was discarded.
+  if [ "$vectors" -eq 0 ] || [ "$text" -eq 0 ]; then
+    echo "error: $bin has no vector table or code; was it linked without link.x?" >&2
+    exit 1
+  fi
   echo "$library,$version,S2,KF,float32,flash_bytes,$((vectors + text + rodata + data)),bytes,$ENV"
   echo "$library,$version,S2,KF,float32,ram_bytes,$((data + bss)),bytes,$ENV"
 done

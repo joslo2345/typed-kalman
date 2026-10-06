@@ -10,7 +10,12 @@ use panic_halt as _;
 
 #[entry]
 fn main() -> ! {
-    let (f, h, q, r) = (matrix(&s2::F), matrix(&s2::H), matrix(&s2::Q), matrix(&s2::R));
+    let (f, h, q, r) = (
+        matrix(&s2::F),
+        matrix(&s2::H),
+        matrix(&s2::Q),
+        matrix(&s2::R),
+    );
     let mut kf = LinearKf::new(SVector::from(s2::X0), matrix(&s2::P0));
     time_and_halt(|| {
         for k in 0..s2::STEPS {

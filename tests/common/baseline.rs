@@ -98,6 +98,17 @@ where
         }
     }
 
+    // The two helpers below spell out every type parameter. Without std, inference takes the
+    // `DimMin` where-clause as a hint and picks the measurement dimension for the state.
+
+    fn filter(&self) -> KalmanFilterNoControl<'_, R, Const<N>, Const<M>> {
+        KalmanFilterNoControl::<R, Const<N>, Const<M>>::new(&self.motion, &self.observation)
+    }
+
+    fn prior(&self) -> StateAndCovariance<R, Const<N>> {
+        StateAndCovariance::<R, Const<N>>::new(self.x0, self.p0)
+    }
+
     /// Runs adskalman over `zs` with `method`, calling `on_step` with each estimate.
     ///
     /// Each step predicts and then updates, starting from the prior, the same order as
@@ -108,8 +119,8 @@ where
         method: CovarianceUpdateMethod,
         mut on_step: impl FnMut(&StateAndCovariance<R, Const<N>>),
     ) -> Result<(), adskalman::Error> {
-        let kf = KalmanFilterNoControl::new(&self.motion, &self.observation);
-        let mut estimate = StateAndCovariance::new(self.x0, self.p0);
+        let kf = self.filter();
+        let mut estimate = self.prior();
         for z in zs {
             estimate = kf.step_with_options(&estimate, z, method)?;
             on_step(&estimate);
@@ -130,8 +141,8 @@ where
 
     /// Runs adskalman's RTS smoother over `zs`.
     pub fn smooth(&self, zs: &[OVector<R, Const<M>>]) -> Vec<StateAndCovariance<R, Const<N>>> {
-        let kf = KalmanFilterNoControl::new(&self.motion, &self.observation);
-        kf.smooth(&StateAndCovariance::new(self.x0, self.p0), zs)
+        self.filter()
+            .smooth(&self.prior(), zs)
             .expect("adskalman smoother failed")
     }
 }

@@ -1,0 +1,22 @@
+# cargo-deny configuration: run with `cargo deny check`.
+
+[graph]
+all-features = true
+
+[advisories]
+# Security advisories and unmaintained crates, in every dependency including dev ones.
+yanked = "deny"
+
+[licenses]
+# Licenses compatible with our MIT OR Apache-2.0. Anything else fails CI until reviewed.
+allow = ["MIT", "Apache-2.0", "Zlib"]
+confidence-threshold = 0.9
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

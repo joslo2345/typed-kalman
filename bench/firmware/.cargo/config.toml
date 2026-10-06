@@ -1,5 +1,6 @@
 [build]
 target = "thumbv7em-none-eabihf"
 
-[target.thumbv7em-none-eabihf]
-rustflags = ["-C", "link-arg=-Tlink.x"]
+# The linker script (-Tlink.x) is passed from build.rs, not as rustflags here: a RUSTFLAGS
+# environment variable, as CI sets, replaces config rustflags, and without the script the
+# linker silently discards the whole program.

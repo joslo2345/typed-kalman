@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Current state
 
-`kalman-rust-repo-guide.md` is the design spec and build plan for the crate `kalman-rs` (crate import name `kalman_rs`). Treat it as the source of truth, and read the relevant section before implementing a step. Steps 1–4 (scaffold, layout, `Cargo.toml`, `lib.rs`) are done. The crate lives at the repo root, not in a `kalman-rs/` subdirectory. Step 5 is done: the model traits are in `src/model.rs` (not listed in the guide's layout), `KalmanError` is in `src/error.rs`, and `Ekf<N>` is implemented in `src/ekf.rs`. Step 6 items 1–2 are done: `LinearKf<N>` in `src/linear.rs` takes the F/H/Q/R matrices directly. Both filters share the private `update::joseph` function, which computes the result without modifying the filter so that errors leave the state unchanged. `Ukf<N>` (with `UkfParams`) is in `src/ukf.rs`, and `SqrtUkf<N>` is in `src/sqrt_ukf.rs`, which completes Step 6 item 3. The RTS smoother is in `src/smoother.rs` (`smooth`, `RtsStep`, `Estimate`), which completes Step 6 item 4. These types are re-exported from the crate root. `src/diagnostics.rs` (Step 6 item 5) has `nees`, `chi_squared_quantile` and `chi_squared_bounds`, and these stay under `kalman_rs::diagnostics`. Step 6 item 6 is in `src/autodiff.rs`, behind the `autodiff` feature and not re-exported at the root. Step 6 item 7 (generic scalar) is done, which completes Step 6. Step 7 is done: the integration tests under `tests/`, `benches/filters.rs`, and a square-root linear KF, `SqrtKf` (`src/sqrt_kf.rs`, not in the guide), added so the guide's full-range stability test can pass. Step 8 is done except for the parts that need things this repo doesn't have: a shared test-vectors repo (the scenarios live in `tests/vectors/` for now) and a board for `cycles_per_step` (the firmware writes it to `CYCLES_PER_STEP` for a probe to read). Work continues with Step 9 (CI).
+`kalman-rust-repo-guide.md` is the design spec and build plan for the crate `kalman-rs` (crate import name `kalman_rs`). Treat it as the source of truth, and read the relevant section before implementing a step. Steps 1–4 (scaffold, layout, `Cargo.toml`, `lib.rs`) are done. The crate lives at the repo root, not in a `kalman-rs/` subdirectory. Step 5 is done: the model traits are in `src/model.rs` (not listed in the guide's layout), `KalmanError` is in `src/error.rs`, and `Ekf<N>` is implemented in `src/ekf.rs`. Step 6 items 1–2 are done: `LinearKf<N>` in `src/linear.rs` takes the F/H/Q/R matrices directly. Both filters share the private `update::joseph` function, which computes the result without modifying the filter so that errors leave the state unchanged. `Ukf<N>` (with `UkfParams`) is in `src/ukf.rs`, and `SqrtUkf<N>` is in `src/sqrt_ukf.rs`, which completes Step 6 item 3. The RTS smoother is in `src/smoother.rs` (`smooth`, `RtsStep`, `Estimate`), which completes Step 6 item 4. These types are re-exported from the crate root. `src/diagnostics.rs` (Step 6 item 5) has `nees`, `chi_squared_quantile` and `chi_squared_bounds`, and these stay under `kalman_rs::diagnostics`. Step 6 item 6 is in `src/autodiff.rs`, behind the `autodiff` feature and not re-exported at the root. Step 6 item 7 (generic scalar) is done, which completes Step 6. Step 7 is done: the integration tests under `tests/`, `benches/filters.rs`, and a square-root linear KF, `SqrtKf` (`src/sqrt_kf.rs`, not in the guide), added so the guide's full-range stability test can pass. Step 8 is done except for the parts that need things this repo doesn't have: a shared test-vectors repo (the scenarios live in `tests/vectors/` for now) and a board for `cycles_per_step` (the firmware writes it to `CYCLES_PER_STEP` for a probe to read). Step 9 is done: `.github/workflows/ci.yml` and `deny.toml`. The repo has no remote yet, so the workflow has only been validated by running every job's commands locally. Work continues with Step 10 (documentation).
 
 Dependency versions are newer than the ones in the guide: `nalgebra` 0.35 (which matches what `adskalman` 0.18 depends on, so their matrix types are compatible) and `criterion` 0.8 (use `std::hint::black_box` instead of `criterion::black_box`).
 
@@ -35,7 +35,10 @@ rustup target add thumbv7em-none-eabihf
 cargo build --target thumbv7em-none-eabihf --no-default-features
 cargo build --target thumbv7em-none-eabihf --no-default-features --features autodiff
 
-cargo deny check                             # licenses and advisories
+cargo deny check                             # advisories, bans, licenses, sources (deny.toml)
+SKIP_UI_TESTS=1 cargo test                   # skip compile-fail snapshots (any toolchain but 1.95.0)
+cargo +1.89 test --all-features              # MSRV; see the macOS SDK note below
+python3 scripts/check_regression.py 0.10     # after cargo bench --bench compare -- --baseline <name>
 
 # Comparison numbers: everything, about 4 minutes; prints the README table
 scripts/run_comparison.sh
@@ -44,7 +47,26 @@ cargo run --release --example generate_vectors   # rewrite tests/vectors/ (froze
 (cd bench/firmware && cargo build --release)     # firmware images; scripts/firmware_sizes.sh reports their sizes
 ```
 
-CI runs tests on stable, beta, and the MSRV, plus clippy, fmt, the thumbv7em `no_std` build, `cargo deny`, and `cargo doc`.
+CI (`.github/workflows/ci.yml`) runs:
+
+- `test`: stable, beta and 1.89 (the MSRV), with all four feature combinations.
+- `ui`: compile-fail snapshots on pinned 1.95.0.
+- `lint`: fmt and clippy, including the firmware crate.
+- `embedded`: the thumbv7em builds plus the firmware crate, which is the only check that instantiates the f32 filters for the target.
+- `docs`: `RUSTDOCFLAGS=-D warnings`.
+- `deny`: `cargo deny`.
+- `vectors`: `sha256sum -c`.
+- `report`: the accuracy, stability and firmware numbers as a `comparison-report` artifact and step summary.
+- `bench` (PRs only): base and head measured back to back on one runner, failing if the low end of Criterion's 95% interval for any of our benchmarks is over +10%.
+
+CI facts learned the hard way:
+
+- **MSRV is 1.89** because nalgebra 0.35 declares it (`rust-version` in `Cargo.toml`); everything else needs 1.89 or less. If you raise a dependency, check its `rust-version`.
+- **`trybuild` `.stderr` snapshots only match the compiler that wrote them.** On any other toolchain, set `SKIP_UI_TESTS=1`. After upgrading the `ui` job's pinned toolchain, regenerate them.
+- **Old toolchains on this Mac:** rustc 1.89 can't link against the macOS 27 SDK (`tapi error: ... unknown architecture`). Use `SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk cargo +1.89 test`. This only affects the local machine; CI runs on Linux.
+- **A `RUSTFLAGS` environment variable replaces `.cargo/config.toml` rustflags.** That's why the firmware passes `-Tlink.x` from `build.rs` (`cargo:rustc-link-arg-bins`). Without it, the linker silently produced a 211-byte image with no code, and `firmware_sizes.sh` now fails on an image with no `.text`.
+- **Without `std`, adskalman's generic constructors infer the wrong dimension.** That's why `baseline::Models::filter`/`prior` spell out `<R, Const<N>, Const<M>>`. Run `cargo test --no-default-features` after touching `tests/common/`, because the default build doesn't catch it.
+- **Criterion leaves `change/estimates.json` files from earlier runs**, and the CI cache restores them. Clear `target/criterion` before a baseline run, as the `bench` job does.
 
 ## Architecture and design rules
 

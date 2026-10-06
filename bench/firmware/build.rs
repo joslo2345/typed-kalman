@@ -33,12 +33,15 @@ fn main() {
     println!("cargo:rerun-if-changed={}", zs_path.display());
     println!("cargo:rerun-if-changed=memory.x");
 
-    // Lets cortex-m-rt's link.x find memory.x.
+    // Lets cortex-m-rt's link.x find memory.x, and links with it. Unlike config rustflags,
+    // this can't be overridden by a RUSTFLAGS environment variable.
     let out = PathBuf::from(env::var("OUT_DIR").unwrap());
     fs::copy("memory.x", out.join("memory.x")).unwrap();
     println!("cargo:rustc-link-search={}", out.display());
+    println!("cargo:rustc-link-arg-bins=-Tlink.x");
 
-    let model: serde_json::Value = serde_json::from_str(&fs::read_to_string(model_path).unwrap()).unwrap();
+    let model: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(model_path).unwrap()).unwrap();
     let bytes = fs::read(zs_path).unwrap();
     let zs: Vec<String> = bytes
         .chunks_exact(8)

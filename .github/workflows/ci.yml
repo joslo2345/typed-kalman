@@ -1,0 +1,183 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  # Warnings fail the lint job (clippy -D warnings covers every target) and the docs job, but
+  # not the test jobs, so a new beta-compiler warning doesn't break unrelated pull requests.
+
+jobs:
+  test:
+    name: test (${{ matrix.toolchain }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 1.89 is the MSRV (nalgebra 0.35 requires it); keep in sync with rust-version.
+        toolchain: [stable, beta, "1.89"]
+    env:
+      # Compile-fail snapshots match only the toolchain pinned in the ui job.
+      SKIP_UI_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.toolchain }}
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --locked --all-features
+      - run: cargo test --locked
+      - run: cargo test --locked --no-default-features
+      - run: cargo test --locked --no-default-features --features autodiff
+
+  ui:
+    name: compile-fail snapshots
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The toolchain that generated tests/compile_fail/*.stderr. When upgrading it, regenerate
+      # them with TRYBUILD=overwrite cargo test --test compile_fail and review the diff.
+      - uses: dtolnay/rust-toolchain@1.95.0
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --locked --test compile_fail
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo fmt --check --manifest-path bench/firmware/Cargo.toml
+      - run: cargo clippy --locked --all-targets --all-features -- -D warnings
+      - run: cargo clippy --locked --all-targets --no-default-features --features autodiff -- -D warnings
+
+  embedded:
+    name: no_std (thumbv7em-none-eabihf)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: thumbv7em-none-eabihf
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            bench/firmware
+      # Type-checks the generic code without std. A single accidental std import fails here.
+      - run: cargo build --locked --target thumbv7em-none-eabihf --no-default-features
+      - run: cargo build --locked --target thumbv7em-none-eabihf --no-default-features --features autodiff
+      # Instantiates the f32 filters for the target, which the builds above don't.
+      - run: cargo build --locked --release
+        working-directory: bench/firmware
+      - run: cargo clippy --locked --release -- -D warnings
+        working-directory: bench/firmware
+
+  docs:
+    runs-on: ubuntu-latest
+    env:
+      RUSTDOCFLAGS: -D warnings
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo doc --locked --no-deps --all-features
+
+  deny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories bans licenses sources
+
+  vectors:
+    name: scenario checksums
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sha256sum -c SHA256SUMS
+        working-directory: tests/vectors
+
+  report:
+    name: comparison report
+    runs-on: ubuntu-latest
+    needs: [test]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: thumbv7em-none-eabihf
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            bench/firmware
+      - name: Collect numbers
+        run: |
+          ENV="$(git rev-parse --short HEAD),$(uname -m),$(uname -s),$(rustc --version | cut -d' ' -f2),$(date +%F)"
+          mkdir -p results
+          echo "library,library_version,scenario,filter,precision,metric,value,unit,commit,cpu,os,toolchain,date" > results/results.csv
+          cargo run --locked --release --example accuracy -- "$ENV" >> results/results.csv
+          scripts/firmware_sizes.sh "$ENV" >> results/results.csv
+          cargo test --locked --test stability --test consistency -- --nocapture 2>&1 \
+            | grep '^report:' > results/test-report.txt
+      - name: Write comparison.md
+        run: |
+          {
+            echo "# Comparison report"
+            echo
+            echo "Accuracy, stability, allocation and firmware-size numbers from CI. Timings come from"
+            echo "the dedicated benchmark machine, not from shared runners."
+            echo
+            python3 scripts/make_table.py results/results.csv kalman-rs
+            echo
+            echo '## Test report lines'
+            echo
+            echo '```'
+            cat results/test-report.txt
+            echo '```'
+          } > comparison.md
+          cat comparison.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: comparison-report
+          path: |
+            comparison.md
+            results/
+
+  bench:
+    name: speed regression
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # Shared runners vary between machines, so both measurements run here, back to back.
+      - name: Benchmark the base branch
+        run: |
+          # The cache restores target/; stale change files would be read as this run's results.
+          rm -rf target/criterion
+          git checkout --quiet ${{ github.event.pull_request.base.sha }}
+          if [ -f benches/compare.rs ]; then
+            cargo bench --locked --bench compare -- --save-baseline base --noplot
+          else
+            echo "base has no benches/compare.rs; nothing to compare against"
+          fi
+          git checkout --quiet ${{ github.event.pull_request.head.sha }}
+      - name: Benchmark this pull request against it
+        run: |
+          if [ -d target/criterion ]; then
+            cargo bench --locked --bench compare -- --baseline base --noplot
+            python3 scripts/check_regression.py 0.10
+          fi
