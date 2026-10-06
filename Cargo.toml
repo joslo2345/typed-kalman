@@ -11,6 +11,9 @@ exclude = [
     "tests/vectors/", "bench/", "results/", "scripts/", "CLAUDE.md", "kalman-rust-repo-guide.md",
 ]
 
+[package.metadata.docs.rs]
+all-features = true
+
 [features]
 default = ["std"]
 std = ["nalgebra/std"]
@@ -40,3 +43,7 @@ harness = false
 # Debug assertions and overflow checks stay on.
 [profile.test]
 opt-level = 3
+
+[[example]]
+name = "imu_attitude"
+required-features = ["autodiff"]
