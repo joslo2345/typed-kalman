@@ -191,15 +191,6 @@ impl<const D: usize, const N: usize, T: Float> SigmaPoints<D, N, T> {
         }
     }
 
-    /// Returns the weighted mean of the points.
-    pub(crate) fn mean(&self, w: &Weights<T>) -> SVector<T, D> {
-        let mut sum = SVector::<T, D>::zeros();
-        for i in 0..N {
-            sum += self.plus.column(i) + self.minus.column(i);
-        }
-        self.center * w.mean0 + sum * w.rest
-    }
-
     /// Returns the weighted cross-covariance between these points (around `mean`) and
     /// `other` (around `other_mean`).
     pub(crate) fn cross_covariance<const E: usize>(
@@ -283,9 +274,12 @@ impl<const N: usize, T: Float> Ukf<N, T> {
         dt: T,
     ) -> Result<(), KalmanError> {
         let w = &self.weights;
-        let points = SigmaPoints::draw(&self.x, &self.p, w)?.map(|s| model.predict(s, dt));
-        let x = points.mean(w);
-        let p = symmetrize(points.cross_covariance(&x, &points, &x, w) + q);
+        // State deviations go through the model's state residual, so wrapped states work.
+        let (x, dx) = SigmaPoints::draw(&self.x, &self.p, w)?
+            .map(|s| model.predict(s, dt))
+            .residual_moments(w, |a, b| model.state_residual(a, b));
+        let zero = SVector::<T, N>::zeros();
+        let p = symmetrize(dx.cross_covariance(&zero, &dx, &zero, w) + q);
 
         if !all_finite(x.as_slice()) || !all_finite(p.as_slice()) {
             return Err(KalmanError::NumericalFailure);

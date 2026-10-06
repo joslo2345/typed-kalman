@@ -82,9 +82,11 @@ impl<const N: usize, T: Float> SqrtUkf<N, T> {
         dt: T,
     ) -> Result<(), KalmanError> {
         let w = &self.weights;
-        let points = SigmaPoints::from_factor(&self.x, &self.s, w).map(|s| model.predict(s, dt));
-        let x = points.mean(w);
-        let s = weighted_factor(&points, &x, q_sqrt, w)
+        // State deviations go through the model's state residual, so wrapped states work.
+        let (x, dx) = SigmaPoints::from_factor(&self.x, &self.s, w)
+            .map(|s| model.predict(s, dt))
+            .residual_moments(w, |a, b| model.state_residual(a, b));
+        let s = weighted_factor(&dx, &SVector::zeros(), q_sqrt, w)
             .ok_or(KalmanError::CovarianceNotPositiveDefinite)?;
 
         if !all_finite(x.as_slice()) || !all_finite(s.as_slice()) {

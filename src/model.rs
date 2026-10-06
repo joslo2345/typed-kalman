@@ -12,6 +12,16 @@ use crate::scalar::Float;
 pub trait ProcessModel<const N: usize, T: Float = f64> {
     /// Propagates the state `x` forward by `dt`.
     fn predict(&self, x: &SVector<T, N>, dt: T) -> SVector<T, N>;
+
+    /// Returns the difference `a - b` between two states.
+    ///
+    /// The default subtracts. Override it when a state component wraps around, such as a
+    /// heading: wrap that component with [`wrap_angle`]. The UKFs use it to average their
+    /// propagated sigma points, so a heading near ±π isn't averaged to 0. To keep the estimate
+    /// itself in range, also wrap the heading in [`predict`](Self::predict).
+    fn state_residual(&self, a: &SVector<T, N>, b: &SVector<T, N>) -> SVector<T, N> {
+        a - b
+    }
 }
 
 /// A [`ProcessModel`] that can also supply its Jacobian.

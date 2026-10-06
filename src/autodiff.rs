@@ -324,6 +324,12 @@ impl<const N: usize, S: Float> Real<S> for Dual<N, S> {
 pub trait AutoProcess<const N: usize, S: Float = f64> {
     /// Propagates the state `x` forward by `dt`.
     fn predict<T: Real<S>>(&self, x: &SVector<T, N>, dt: S) -> SVector<T, N>;
+
+    /// Returns the difference `a - b` between two states; see
+    /// [`ProcessModel::state_residual`]. Override it for wrapped components such as headings.
+    fn state_residual(&self, a: &SVector<S, N>, b: &SVector<S, N>) -> SVector<S, N> {
+        a - b
+    }
 }
 
 /// A measurement model written generically over [`Real`], so [`AutoDiff`] can differentiate
@@ -361,6 +367,10 @@ impl<Model: AutoProcess<N, S>, const N: usize, S: Float + Real<S>> ProcessModel<
 {
     fn predict(&self, x: &SVector<S, N>, dt: S) -> SVector<S, N> {
         self.0.predict(x, dt)
+    }
+
+    fn state_residual(&self, a: &SVector<S, N>, b: &SVector<S, N>) -> SVector<S, N> {
+        self.0.state_residual(a, b)
     }
 }
 

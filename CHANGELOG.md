@@ -6,6 +6,12 @@ All notable changes to this crate are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `ProcessModel::state_residual` (and `AutoProcess::state_residual`): states with a component
+  that wraps, such as a heading, work across ±π. The UKF and SR-UKF use it to average and
+  spread their propagated sigma points.
+
 ## [0.1.0] - 2026-10-06
 
 First release.

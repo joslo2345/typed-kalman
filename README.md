@@ -248,6 +248,7 @@ _Not yet measured on the benchmark machine._
 | Cycle counts on real hardware | The firmware already records them; it needs a board run |
 | Shared scenario files with the C, C++ and Python implementations | The files exist in `tests/vectors/`; they'll move to a shared repository |
 | Angle wrapping for residuals (bearings near ±π) | ✅ Done: override `MeasurementModel::residual`, with `wrap_angle` |
+| Angles in the state (headings near ±π) | ✅ Done: override `ProcessModel::state_residual` |
 | `autodiff` in `f32` | ✅ Done: implement `AutoProcess<N, f32>` / `AutoMeasurement<N, M, f32>` |
 
 <a id="contributing"></a>

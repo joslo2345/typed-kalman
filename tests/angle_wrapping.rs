@@ -240,3 +240,138 @@ fn wrap_angle_maps_into_minus_pi_to_pi() {
     // Works in f32 too.
     assert!((wrap_angle(3.5f32) - (3.5 - 2.0 * std::f32::consts::PI)).abs() < 1e-6);
 }
+
+/// A spinning heading `[θ, ω]`, measured directly. The measurement residual always wraps;
+/// `wrap_state` chooses whether the state residual does too.
+struct Spinner {
+    wrap_state: bool,
+}
+
+impl ProcessModel<2> for Spinner {
+    fn predict(&self, x: &Vector2<f64>, dt: f64) -> Vector2<f64> {
+        // Keep the estimate itself in [-π, π), as the docs recommend.
+        Vector2::new(wrap_angle(x[0] + x[1] * dt), x[1])
+    }
+
+    fn state_residual(&self, a: &Vector2<f64>, b: &Vector2<f64>) -> Vector2<f64> {
+        let d = a - b;
+        if self.wrap_state {
+            Vector2::new(wrap_angle(d[0]), d[1])
+        } else {
+            d
+        }
+    }
+}
+
+impl MeasurementModel<2, 1> for Spinner {
+    fn measure(&self, x: &Vector2<f64>) -> nalgebra::Vector1<f64> {
+        nalgebra::Vector1::new(x[0])
+    }
+
+    fn residual(
+        &self,
+        a: &nalgebra::Vector1<f64>,
+        b: &nalgebra::Vector1<f64>,
+    ) -> nalgebra::Vector1<f64> {
+        nalgebra::Vector1::new(wrap_angle(a[0] - b[0]))
+    }
+}
+
+/// What a spin run produced, per filter.
+struct Spin {
+    nis_ukf: Vec<f64>,
+    nis_sr: Vec<f64>,
+    /// Largest heading variance the UKF reported.
+    max_variance: f64,
+    /// Largest heading error of the UKF, wrapped into [-π, π).
+    max_error: f64,
+}
+
+/// Spins at 0.5 rad/s for 60 s, crossing ±π about five times, filtering with a UKF and an
+/// SR-UKF.
+fn spin(wrap_state: bool) -> Spin {
+    const SPIN_STEPS: usize = 600;
+    let dt = 0.1;
+    let model = Spinner { wrap_state };
+    // Uncertain enough that the sigma points (about ±0.14 rad) straddle ±π at every crossing.
+    let q = Matrix2::new(1e-4, 0.0, 0.0, 1e-6);
+    let r = nalgebra::Matrix1::new(1e-2); // 0.1 rad
+    let p0 = Matrix2::new(0.01, 0.0, 0.0, 0.01);
+    let (q_sqrt, r_sqrt) = (
+        Cholesky::new(q).unwrap().unpack(),
+        Cholesky::new(r).unwrap().unpack(),
+    );
+
+    let mut rng = Rng::new(11);
+    let mut truth = Vector2::new(2.5, 0.5);
+    let mut ukf = Ukf::new(Vector2::new(2.45, 0.48), p0);
+    let mut sr = SqrtUkf::new(Vector2::new(2.45, 0.48), p0).unwrap();
+    let (mut nis_ukf, mut nis_sr) = (Vec::new(), Vec::new());
+    let (mut max_variance, mut max_error) = (0.0f64, 0.0f64);
+    for _ in 0..SPIN_STEPS {
+        truth = Vector2::new(
+            wrap_angle(truth[0] + truth[1] * dt + 0.01 * rng.normal()),
+            truth[1],
+        );
+        let z = nalgebra::Vector1::new(wrap_angle(truth[0] + 0.1 * rng.normal()));
+
+        let step_ukf = ukf
+            .predict(&model, &q, dt)
+            .and_then(|_| ukf.update(&model, &z, &r));
+        nis_ukf.push(step_ukf.unwrap_or(f64::INFINITY));
+        max_variance = max_variance.max(ukf.covariance()[(0, 0)]);
+        max_error = max_error.max(wrap_angle(ukf.state()[0] - truth[0]).abs());
+        let step_sr = sr
+            .predict(&model, &q_sqrt, dt)
+            .and_then(|_| sr.update(&model, &z, &r_sqrt));
+        nis_sr.push(step_sr.unwrap_or(f64::INFINITY));
+    }
+    Spin {
+        nis_ukf,
+        nis_sr,
+        max_variance,
+        max_error,
+    }
+}
+
+#[test]
+fn ukfs_track_a_heading_across_the_seam_with_a_wrapping_state_residual() {
+    let run = spin(true);
+    assert!(
+        run.max_error < 0.5,
+        "heading error reached {} rad",
+        run.max_error
+    );
+    assert!(
+        run.max_variance < 0.02,
+        "heading variance reached {}",
+        run.max_variance
+    );
+    for (name, nis) in [("Ukf", run.nis_ukf), ("SqrtUkf", run.nis_sr)] {
+        let average = nis.iter().sum::<f64>() / nis.len() as f64;
+        let bounds = chi_squared_bounds(1, nis.len(), 0.99).unwrap();
+        assert!(
+            bounds.contains(average),
+            "{name}: average NIS {average} outside {bounds:?}"
+        );
+    }
+}
+
+#[test]
+fn without_a_wrapping_state_residual_the_heading_breaks() {
+    // The control case: measurement wrapping stays on, only the state residual is plain
+    // subtraction. It shows the test above depends on `state_residual`.
+    let run = spin(false);
+    // Averaging sigma points that straddle ±π inflates the covariance (deviations near 2π)
+    // and pulls the mean toward the opposite heading.
+    assert!(
+        run.max_variance > 0.05,
+        "heading variance without state wrapping was only {}",
+        run.max_variance
+    );
+    assert!(
+        run.max_error > 1.0,
+        "heading error without state wrapping was only {} rad",
+        run.max_error
+    );
+}
