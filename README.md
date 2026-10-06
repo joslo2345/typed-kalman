@@ -252,6 +252,8 @@ _Not yet measured on the benchmark machine._
 | Angles in the state (headings near ±π) | ✅ Done: override `ProcessModel::state_residual` |
 | Control inputs | ✅ Done: `predict_with_input` on the matrix filters, `WithInput` for model-based ones |
 | Unscented RTS smoother | ✅ Done: `Ukf::predict_with_cross` and `smoother::smooth_with_cross` |
+
+The plan for 0.2.0, including the API cleanups it will bring, is in [ROADMAP.md](ROADMAP.md).
 | `autodiff` in `f32` | ✅ Done: implement `AutoProcess<N, f32>` / `AutoMeasurement<N, M, f32>` |
 
 <a id="contributing"></a>

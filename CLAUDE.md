@@ -124,6 +124,10 @@ CI facts learned the hard way:
 - **Keep `#[inline]` on the generic step paths** (`update::joseph`, `symmetrize`, `all_finite`, the filters' `predict`/`update`, `SigmaPoints` methods, `cholupdate`). Without the hints LLVM didn't inline `update::joseph` and its `Corrected` return, so every step copied matrices through memory. That cost 11% on S2 f32 and 39% for `SqrtKf`, which was first misattributed to transposing F and H. A side-by-side variant that transposed every step was as fast as one with precomputed transposes, which ruled that out. Firmware size is unaffected: LTO already inlined there. Accuracy, NEES and allocations are identical; on S4 both survive 1M steps. "Ours vs best other" compares with `adskalman-optimal`, which is fastest but fails S4 at step 0.
 - Measure performance changes **side by side in one benchmark binary**, with the variants as const-generic flags of a single function. Sequential A/B runs on the laptop drift by ±5–15%, and twice gave the opposite conclusion (inverting S looked 2% slower sequentially but was 8% faster side by side).
 
+## Roadmap
+
+`ROADMAP.md` holds the plan for 0.2.0: breaking API cleanups (every `predict` returning `Result`, one `covariance()` return type, a common filter trait), additive gaps, examples, and infrastructure. Bundle all breaking changes into 0.2.0. Update the file as items are done or user feedback reorders them.
+
 ## Releasing
 
 Publishing to crates.io is public and permanent (versions can be yanked, never deleted), so it only happens on the user's explicit go-ahead.
