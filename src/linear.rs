@@ -38,6 +38,20 @@ impl<const N: usize, T: Float> LinearKf<N, T> {
         self.p = symmetrize(f * self.p * f.transpose() + q);
     }
 
+    /// Propagates the state with transition matrix `f`, a known control input `u` entering
+    /// through `b`, and process noise `q`: `x = F x + B u`. The input is treated as exact, so
+    /// the covariance is the same as for [`predict`](Self::predict).
+    pub fn predict_with_input<const U: usize>(
+        &mut self,
+        f: &SMatrix<T, N, N>,
+        b: &SMatrix<T, N, U>,
+        u: &SVector<T, U>,
+        q: &SMatrix<T, N, N>,
+    ) {
+        self.predict(f, q);
+        self.x += b * u;
+    }
+
     /// Corrects the estimate with measurement `z`, observation matrix `h` and measurement
     /// noise `r`, using the Joseph-form covariance update.
     ///

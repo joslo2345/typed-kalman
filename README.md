@@ -249,6 +249,7 @@ _Not yet measured on the benchmark machine._
 | Shared scenario files with the C, C++ and Python implementations | The files exist in `tests/vectors/`; they'll move to a shared repository |
 | Angle wrapping for residuals (bearings near ±π) | ✅ Done: override `MeasurementModel::residual`, with `wrap_angle` |
 | Angles in the state (headings near ±π) | ✅ Done: override `ProcessModel::state_residual` |
+| Control inputs | ✅ Done: `predict_with_input` on the matrix filters, `WithInput` for model-based ones |
 | `autodiff` in `f32` | ✅ Done: implement `AutoProcess<N, f32>` / `AutoMeasurement<N, M, f32>` |
 
 <a id="contributing"></a>

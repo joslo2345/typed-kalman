@@ -8,6 +8,9 @@ All notable changes to this crate are documented here. The format follows
 
 ### Added
 
+- Control inputs: `LinearKf::predict_with_input` and `SqrtKf::predict_with_input`
+  (`x = F x + B u`), and `ControlledProcess` / `ControlledJacobian` with the `WithInput` adapter,
+  which works with every model-based filter.
 - `ProcessModel::state_residual` (and `AutoProcess::state_residual`): states with a component
   that wraps, such as a heading, work across ±π. The UKF and SR-UKF use it to average and
   spread their propagated sigma points.

@@ -52,6 +52,28 @@ impl<const N: usize, T: Float> SqrtKf<N, T> {
         self.s * self.s.transpose()
     }
 
+    /// Propagates the state with transition matrix `f`, a known control input `u` entering
+    /// through `b`, and process noise `Q = q_sqrt q_sqrtᵀ`: `x = F x + B u`. The input is treated
+    /// as exact, so the covariance factor is the same as for [`predict`](Self::predict).
+    ///
+    /// Returns [`KalmanError::InvalidInput`] if `B u` isn't finite.
+    pub fn predict_with_input<const U: usize, const K: usize>(
+        &mut self,
+        f: &SMatrix<T, N, N>,
+        b: &SMatrix<T, N, U>,
+        u: &SVector<T, U>,
+        q_sqrt: &SMatrix<T, N, K>,
+    ) -> Result<(), KalmanError> {
+        // Checked first, so a bad input leaves the filter unchanged.
+        let bu = b * u;
+        if !all_finite(bu.as_slice()) {
+            return Err(KalmanError::InvalidInput);
+        }
+        self.predict(f, q_sqrt)?;
+        self.x += bu;
+        Ok(())
+    }
+
     /// Propagates the state with transition matrix `f` and process noise
     /// `Q = q_sqrt q_sqrtᵀ`.
     pub fn predict<const K: usize>(

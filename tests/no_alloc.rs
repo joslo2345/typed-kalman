@@ -106,6 +106,10 @@ fn filter_loops_do_not_allocate() {
         sr.update(&model, z, &r_sqrt).unwrap();
         skf.predict(&sc.f, &q_sqrt).unwrap();
         skf.update(&sc.h, z, &r_sqrt).unwrap();
+        let input = nalgebra::Vector2::new(0.1, -0.1);
+        let b = nalgebra::Matrix4x2::new(0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0);
+        kf.predict_with_input(&sc.f, &b, &input, &sc.q);
+        skf.predict_with_input(&sc.f, &b, &input, &q_sqrt).unwrap();
     }
     smooth(&history, &mut smoothed).unwrap();
     let allocations = ALLOCS.load(Ordering::SeqCst) - before;
