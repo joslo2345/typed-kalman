@@ -4,7 +4,7 @@ mod common;
 
 use common::scenarios;
 use kalman_rs::{Ekf, KalmanError, LinearKf, MeasurementJacobian, MeasurementModel};
-use kalman_rs::{SqrtUkf, Ukf};
+use kalman_rs::{SqrtKf, SqrtUkf, Ukf};
 use nalgebra::{Matrix2, Matrix2x4, Matrix4, Vector2, Vector4};
 
 /// Measures position, or NaN when `broken` is set, as a model failing at some states might.
@@ -79,6 +79,8 @@ fn invalid_inputs_are_rejected_by_every_filter() {
         assert_rejected(name, &mut ukf, expected, |f| f.update(&model, &z, &r));
         let mut sr = SqrtUkf::new(sc.x0, sc.p0).unwrap();
         assert_rejected(name, &mut sr, expected, |f| f.update(&model, &z, &r_sqrt));
+        let mut skf = SqrtKf::new(sc.x0, sc.p0).unwrap();
+        assert_rejected(name, &mut skf, expected, |f| f.update(&sc.h, &z, &r_sqrt));
     }
 }
 
@@ -153,6 +155,10 @@ fn non_positive_definite_covariance_is_rejected_by_sigma_point_filters() {
     );
     assert_eq!(
         SqrtUkf::new(sc.x0, indefinite),
+        Err(KalmanError::CovarianceNotPositiveDefinite)
+    );
+    assert_eq!(
+        SqrtKf::new(sc.x0, indefinite),
         Err(KalmanError::CovarianceNotPositiveDefinite)
     );
 }

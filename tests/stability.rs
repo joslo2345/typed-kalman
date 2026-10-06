@@ -7,6 +7,7 @@ use common::rng::Rng;
 use common::{scenarios, FromScenario};
 use kalman_rs::linear::LinearKf;
 use kalman_rs::Float;
+use kalman_rs::SqrtKf;
 use nalgebra::{Cholesky, SMatrix};
 use proptest::prelude::*;
 
@@ -40,6 +41,33 @@ proptest! {
             let p = kf.covariance();
             prop_assert!((p - p.transpose()).abs().max() < 1e-10);
             prop_assert!(p.cholesky().is_some());
+        }
+    }
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(200))]
+
+    /// The guide's full range, which `LinearKf` can't cover: the square-root filter's factor
+    /// has the square root of P's condition number, so it stays representable. A strictly
+    /// positive diagonal on the lower-triangular factor proves `S Sᵀ` positive-definite.
+    #[test]
+    fn sqrt_kf_factor_stays_valid_over_the_full_range(
+        seed in any::<u64>(),
+        log_r in -12.0f64..2.0,
+    ) {
+        let sc = scenarios::random_linear(seed, 10f64.powf(log_r), 2000);
+        let q_sqrt = Cholesky::new(sc.q).unwrap().unpack();
+        let r_sqrt = Cholesky::new(sc.r).unwrap().unpack();
+        let mut kf = SqrtKf::new(sc.x0, sc.p0).unwrap();
+
+        for (step, z) in sc.zs.iter().enumerate() {
+            let result = kf.predict(&sc.f, &q_sqrt).and_then(|_| kf.update(&sc.h, z, &r_sqrt));
+            prop_assert!(result.is_ok(), "step {}: {:?}", step, result);
+
+            let s = kf.sqrt_covariance();
+            prop_assert!(s.iter().all(|v| v.is_finite()));
+            prop_assert!((0..4).all(|i| s[(i, i)] > 0.0), "step {}: diagonal {}", step, s.diagonal());
         }
     }
 }
@@ -99,5 +127,94 @@ fn f32_million_steps() {
     assert!(
         naive_failed_at.is_some(),
         "S4 no longer breaks the naive filter, so it doesn't test stability"
+    );
+}
+
+/// A case found by proptest where P's condition number grows past 1e17, so Cholesky fails for
+/// `LinearKf`, the naive filter and adskalman alike (each within a few hundred steps). The square-root filter
+/// must get through all 2,000 steps.
+#[test]
+fn sqrt_kf_survives_a_case_that_breaks_covariance_filters() {
+    let sc = scenarios::random_linear(
+        6_892_070_046_071_684_633,
+        10f64.powf(-11.843_856_017_616_23),
+        2000,
+    );
+    let q_sqrt = Cholesky::new(sc.q).unwrap().unpack();
+    let r_sqrt = Cholesky::new(sc.r).unwrap().unpack();
+
+    let mut sr = SqrtKf::new(sc.x0, sc.p0).unwrap();
+    let mut kf = LinearKf::from_scenario(&sc);
+    let mut kf_failed_at = None;
+    for (step, z) in sc.zs.iter().enumerate() {
+        sr.predict(&sc.f, &q_sqrt).unwrap();
+        sr.update(&sc.h, z, &r_sqrt)
+            .unwrap_or_else(|e| panic!("SqrtKf failed at step {step}: {e}"));
+        let s = sr.sqrt_covariance();
+        assert!(
+            (0..4).all(|i| s[(i, i)] > 0.0),
+            "SqrtKf factor degenerate at step {step}"
+        );
+
+        if kf_failed_at.is_none() {
+            kf.predict(&sc.f, &sc.q);
+            if kf.update(&sc.h, z, &sc.r).is_err() || kf.covariance().cholesky().is_none() {
+                kf_failed_at = Some(step);
+            }
+        }
+    }
+    println!("report: f64 extreme case: LinearKf first non-PD at {kf_failed_at:?}, SqrtKf ok");
+}
+
+/// A million single-precision steps of a problem whose covariance exceeds `f32`'s range
+/// (`scenarios::beyond_f32`). `LinearKf` loses positive-definiteness almost at once; `SqrtKf`
+/// must not.
+#[test]
+fn sqrt_kf_handles_what_f32_covariance_filters_cannot() {
+    const STEPS: usize = 1_000_000;
+    let sc = scenarios::beyond_f32();
+    let (f, h, q, r) = (
+        sc.f.cast::<f32>(),
+        sc.h.cast::<f32>(),
+        sc.q.cast::<f32>(),
+        sc.r.cast::<f32>(),
+    );
+    let q_sqrt = Cholesky::new(sc.q).unwrap().unpack().cast::<f32>();
+    let r_sqrt = Cholesky::new(sc.r).unwrap().unpack().cast::<f32>();
+
+    let mut sr = SqrtKf::new(sc.x0.cast::<f32>(), sc.p0.cast::<f32>()).unwrap();
+    let mut kf = LinearKf::new(sc.x0.cast::<f32>(), sc.p0.cast::<f32>());
+    let mut kf_failed_at = None;
+
+    let mut rng = Rng::new(4);
+    let mut sim = sc.simulator(&mut rng);
+    for step in 1..=STEPS {
+        let (_, z) = sim.next_step(&mut rng);
+        let z = z.cast::<f32>();
+
+        sr.predict(&f, &q_sqrt)
+            .and_then(|_| sr.update(&h, &z, &r_sqrt))
+            .unwrap_or_else(|e| panic!("SqrtKf failed at step {step}: {e}"));
+        let s = sr.sqrt_covariance();
+        assert!(
+            s.iter().all(|v| v.is_finite()) && (0..4).all(|i| s[(i, i)] > 0.0),
+            "SqrtKf factor degenerate at step {step}"
+        );
+
+        if kf_failed_at.is_none() {
+            kf.predict(&f, &q);
+            if kf.update(&h, &z, &r).is_err() || !is_spd(kf.covariance(), 1e-4) {
+                kf_failed_at = Some(step);
+            }
+        }
+    }
+    match kf_failed_at {
+        Some(step) => println!("report: beyond-f32 LinearKf steps_to_failure = {step}"),
+        None => println!("report: beyond-f32 LinearKf stayed stable for {STEPS} steps"),
+    }
+    println!("report: beyond-f32 SqrtKf steps_to_failure > {STEPS}");
+    assert!(
+        kf_failed_at.is_some(),
+        "beyond_f32 no longer breaks LinearKf, so it doesn't show what SqrtKf adds"
     );
 }

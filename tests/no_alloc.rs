@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use kalman_rs::smoother::{smooth, Estimate, RtsStep};
 use kalman_rs::{Ekf, LinearKf, MeasurementJacobian, MeasurementModel, ProcessJacobian};
-use kalman_rs::{ProcessModel, SqrtUkf, Ukf};
+use kalman_rs::{ProcessModel, SqrtKf, SqrtUkf, Ukf};
 use nalgebra::{Cholesky, Matrix2, Matrix2x4, Matrix4, Vector2, Vector4};
 
 struct Counting;
@@ -72,6 +72,7 @@ fn filter_loops_do_not_allocate() {
     let mut ekf = Ekf::new(sc.x0, sc.p0);
     let mut ukf = Ukf::new(sc.x0, sc.p0);
     let mut sr = SqrtUkf::new(sc.x0, sc.p0).unwrap();
+    let mut skf = SqrtKf::new(sc.x0, sc.p0).unwrap();
     let prior = Estimate { x: sc.x0, p: sc.p0 };
     let mut history = [RtsStep {
         f: sc.f,
@@ -103,6 +104,8 @@ fn filter_loops_do_not_allocate() {
         ukf.update(&model, z, &sc.r).unwrap();
         sr.predict(&model, &q_sqrt, 0.1).unwrap();
         sr.update(&model, z, &r_sqrt).unwrap();
+        skf.predict(&sc.f, &q_sqrt).unwrap();
+        skf.update(&sc.h, z, &r_sqrt).unwrap();
     }
     smooth(&history, &mut smoothed).unwrap();
     let allocations = ALLOCS.load(Ordering::SeqCst) - before;

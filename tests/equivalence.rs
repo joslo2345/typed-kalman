@@ -9,6 +9,8 @@ use common::baseline::{self, Method, Models};
 use common::{scenarios, FromScenario};
 use kalman_rs::linear::LinearKf;
 use kalman_rs::smoother::{smooth, Estimate, RtsStep};
+use kalman_rs::SqrtKf;
+use nalgebra::Cholesky;
 
 #[test]
 fn matches_adskalman_on_constant_velocity() {
@@ -93,5 +95,23 @@ fn smoother_matches_adskalman() {
     for (o, t) in ours.iter().zip(&theirs) {
         approx::assert_relative_eq!(o.x, *t.state(), epsilon = 1e-9);
         approx::assert_relative_eq!(o.p, *t.covariance(), epsilon = 1e-9);
+    }
+}
+
+#[test]
+fn sqrt_kf_matches_adskalman() {
+    for seed in [42, 43, 44] {
+        let sc = scenarios::constant_velocity(1000, seed);
+        let theirs = baseline::adskalman_filter(&sc);
+        let q_sqrt = Cholesky::new(sc.q).unwrap().unpack();
+        let r_sqrt = Cholesky::new(sc.r).unwrap().unpack();
+
+        let mut ours = SqrtKf::new(sc.x0, sc.p0).unwrap();
+        for (k, z) in sc.zs.iter().enumerate() {
+            ours.predict(&sc.f, &q_sqrt).unwrap();
+            ours.update(&sc.h, z, &r_sqrt).unwrap();
+            approx::assert_relative_eq!(ours.state(), theirs[k].state(), epsilon = 1e-9);
+            approx::assert_relative_eq!(ours.covariance(), *theirs[k].covariance(), epsilon = 1e-9);
+        }
     }
 }

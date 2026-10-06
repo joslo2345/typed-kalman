@@ -5,6 +5,7 @@
 
 #[cfg(feature = "autodiff")]
 pub mod autodiff;
+mod cholupdate;
 pub mod diagnostics;
 pub mod ekf;
 pub mod error;
@@ -12,6 +13,7 @@ pub mod linear;
 pub mod model;
 pub mod scalar;
 pub mod smoother;
+pub mod sqrt_kf;
 pub mod sqrt_ukf;
 pub mod ukf;
 mod update;
@@ -22,5 +24,6 @@ pub use linear::LinearKf;
 pub use model::{MeasurementJacobian, MeasurementModel, ProcessJacobian, ProcessModel};
 pub use scalar::Float;
 pub use smoother::{Estimate, RtsStep};
+pub use sqrt_kf::SqrtKf;
 pub use sqrt_ukf::SqrtUkf;
 pub use ukf::{Ukf, UkfParams};

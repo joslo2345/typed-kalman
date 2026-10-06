@@ -181,3 +181,22 @@ pub fn ill_conditioned() -> Scenario<4, 2> {
         &mut Rng::new(4),
     )
 }
+
+/// A problem beyond what any covariance-form filter can represent in `f32`.
+///
+/// One-second steps with nearly perfect measurements (variance 1e-8) against a prior of 1e4
+/// make P's condition number far exceed `f32`'s ~1e7 range, so `LinearKf` loses
+/// positive-definiteness within two steps. Its square root stays within range, so `SqrtKf`
+/// keeps going.
+pub fn beyond_f32() -> Scenario<4, 2> {
+    Scenario::simulate(
+        constant_velocity_f(1.0),
+        position_h(),
+        Matrix4::from_diagonal(&Vector4::new(1e-12, 1e-12, 1e-9, 1e-9)),
+        Matrix2::identity() * 1e-8,
+        Vector4::zeros(),
+        Matrix4::identity() * 1e4,
+        0,
+        &mut Rng::new(4),
+    )
+}

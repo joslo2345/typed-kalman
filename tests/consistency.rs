@@ -8,7 +8,7 @@ mod common;
 use common::scenarios;
 use kalman_rs::diagnostics::{chi_squared_bounds, nees};
 use kalman_rs::{Ekf, LinearKf, MeasurementJacobian, MeasurementModel, ProcessJacobian};
-use kalman_rs::{KalmanError, ProcessModel, SqrtUkf, Ukf};
+use kalman_rs::{KalmanError, ProcessModel, SqrtKf, SqrtUkf, Ukf};
 use nalgebra::{Cholesky, Matrix2, Matrix2x4, Matrix4, Vector2, Vector4};
 
 const RUNS: usize = 500;
@@ -136,5 +136,20 @@ fn sqrt_ukf_is_consistent() {
             sr.update(&model(sc), z, &r_sqrt)
         },
         |sr| (*sr.state(), sr.covariance()),
+    );
+}
+
+#[test]
+fn sqrt_kf_is_consistent() {
+    assert_consistent(
+        "SqrtKf",
+        |sc| SqrtKf::new(sc.x0, sc.p0).unwrap(),
+        |kf, sc, z| {
+            let q_sqrt = Cholesky::new(sc.q).unwrap().unpack();
+            let r_sqrt: Matrix2<f64> = Cholesky::new(sc.r).unwrap().unpack();
+            kf.predict(&sc.f, &q_sqrt)?;
+            kf.update(&sc.h, z, &r_sqrt)
+        },
+        |kf| (*kf.state(), kf.covariance()),
     );
 }
