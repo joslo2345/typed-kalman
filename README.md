@@ -123,7 +123,8 @@ println!("position {:.2}, velocity {:.2}", kf.state()[0], kf.state()[1]);
 | **`Ukf`** | a model only | the system is nonlinear and Jacobians are awkward |
 | **`SqrtUkf`** | a model, noise as square roots | as the UKF, with a covariance factor that can't lose positive-definiteness |
 
-`smoother::smooth` runs a Rauch-Tung-Striebel smoother over a recorded history, and
+`smoother::smooth` runs a Rauch-Tung-Striebel smoother over a recorded history (for the UKF,
+`smoother::smooth_with_cross` with `Ukf::predict_with_cross`), and
 `diagnostics` checks consistency with NEES and chi-squared bounds.
 
 <a id="embedded-use"></a>
@@ -250,6 +251,7 @@ _Not yet measured on the benchmark machine._
 | Angle wrapping for residuals (bearings near ±π) | ✅ Done: override `MeasurementModel::residual`, with `wrap_angle` |
 | Angles in the state (headings near ±π) | ✅ Done: override `ProcessModel::state_residual` |
 | Control inputs | ✅ Done: `predict_with_input` on the matrix filters, `WithInput` for model-based ones |
+| Unscented RTS smoother | ✅ Done: `Ukf::predict_with_cross` and `smoother::smooth_with_cross` |
 | `autodiff` in `f32` | ✅ Done: implement `AutoProcess<N, f32>` / `AutoMeasurement<N, M, f32>` |
 
 <a id="contributing"></a>

@@ -43,7 +43,8 @@
 //! | [`Ukf`] | [`ProcessModel`], [`MeasurementModel`] | the system is nonlinear and Jacobians are awkward |
 //! | [`SqrtUkf`] | the same, noise as square roots | as the UKF, with a covariance factor that can't lose positive-definiteness |
 //!
-//! [`smoother::smooth`] runs a Rauch-Tung-Striebel smoother over a recorded history, and
+//! [`smoother::smooth`] runs a Rauch-Tung-Striebel smoother over a recorded history (for the
+//! UKF, [`smoother::smooth_with_cross`] with [`Ukf::predict_with_cross`]), and
 //! [`diagnostics`] checks filter consistency with NEES and chi-squared bounds.
 //!
 //! # Errors
@@ -109,7 +110,7 @@ pub use model::{
     ProcessJacobian, ProcessModel, WithInput,
 };
 pub use scalar::Float;
-pub use smoother::{Estimate, RtsStep};
+pub use smoother::{CrossStep, Estimate, RtsStep};
 pub use sqrt_kf::SqrtKf;
 pub use sqrt_ukf::SqrtUkf;
 pub use ukf::{Ukf, UkfParams};

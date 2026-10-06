@@ -150,7 +150,7 @@ jobs:
           echo "library,library_version,scenario,filter,precision,metric,value,unit,commit,cpu,os,toolchain,date" > results/results.csv
           cargo run --locked --release --example accuracy -- "$ENV" >> results/results.csv
           scripts/firmware_sizes.sh "$ENV" >> results/results.csv
-          cargo test --locked --test stability --test consistency -- --nocapture 2>&1 \
+          cargo test --locked --test stability --test consistency --test smoothing -- --nocapture 2>&1 \
             | grep '^report:' > results/test-report.txt
       - name: Write comparison.md
         run: |

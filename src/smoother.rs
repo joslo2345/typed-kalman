@@ -4,8 +4,10 @@
 //! works on slices, so the history can live in a `Vec` or, without `std`, in a fixed-size
 //! array.
 //!
-//! It applies to the [`LinearKf`](crate::linear::LinearKf), and to the
+//! [`smooth`] applies to the [`LinearKf`](crate::linear::LinearKf), and to the
 //! [`Ekf`](crate::ekf::Ekf) if each step records the process Jacobian as `f`.
+//! [`smooth_with_cross`] is the unscented RTS smoother, for the [`Ukf`](crate::ukf::Ukf) via
+//! [`Ukf::predict_with_cross`](crate::ukf::Ukf::predict_with_cross).
 
 use nalgebra::{Cholesky, SMatrix, SVector};
 
@@ -36,6 +38,24 @@ pub struct RtsStep<const N: usize, T: Float = f64> {
     pub filtered: Estimate<N, T>,
 }
 
+/// What the smoother needs from one step of a filter that reports the cross-covariance between
+/// consecutive states, such as [`Ukf::predict_with_cross`](crate::ukf::Ukf::predict_with_cross).
+///
+/// [`RtsStep`] is the special case for linear and linearized filters, where the
+/// cross-covariance is `P_filtered Fᵀ`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CrossStep<const N: usize, T: Float = f64> {
+    /// The cross-covariance between the previous step's filtered state and this step's
+    /// predicted state. Ignored for the first step.
+    pub cross: SMatrix<T, N, N>,
+    /// The estimate after predicting this step, before its measurement update. For the first
+    /// step, the prior.
+    pub predicted: Estimate<N, T>,
+    /// The estimate after this step's measurement update. If a step had no measurement, this
+    /// equals `predicted`.
+    pub filtered: Estimate<N, T>,
+}
+
 /// Runs the RTS smoother backward over `steps`, writing the smoothed estimate of each step to
 /// the same index of `out`.
 ///
@@ -46,27 +66,106 @@ pub fn smooth<const N: usize, T: Float>(
     steps: &[RtsStep<N, T>],
     out: &mut [Estimate<N, T>],
 ) -> Result<(), KalmanError> {
-    if steps.len() != out.len() {
+    backward(
+        steps.len(),
+        out,
+        |k| {
+            let (current, next) = (&steps[k], &steps[k + 1]);
+            // For a linear transition, Cov(x_k, x_{k+1}⁻) = P_k Fᵀ.
+            (
+                current.filtered,
+                next.predicted,
+                current.filtered.p * next.f.transpose(),
+            )
+        },
+        |k| steps[k].filtered,
+    )
+}
+
+/// Runs the unscented RTS smoother (Särkkä, 2008) backward over `steps`, which come from a
+/// filter that reports cross-covariances. Errors are as for [`smooth`].
+///
+/// ```
+/// use typed_kalman::smoother::{smooth_with_cross, CrossStep, Estimate};
+/// use typed_kalman::{MeasurementModel, ProcessModel, Ukf};
+/// use nalgebra::{Matrix1, Matrix2, Vector1, Vector2};
+///
+/// /// A pendulum, `[angle, angular velocity]`, measured by its horizontal position.
+/// struct Pendulum;
+///
+/// impl ProcessModel<2> for Pendulum {
+///     fn predict(&self, x: &Vector2<f64>, dt: f64) -> Vector2<f64> {
+///         Vector2::new(x[0] + x[1] * dt, x[1] - 9.81 * x[0].sin() * dt)
+///     }
+/// }
+///
+/// impl MeasurementModel<2, 1> for Pendulum {
+///     fn measure(&self, x: &Vector2<f64>) -> Vector1<f64> {
+///         Vector1::new(x[0].sin())
+///     }
+/// }
+///
+/// let (q, r) = (Matrix2::new(1e-6, 0.0, 0.0, 1e-4), Matrix1::new(0.01));
+/// let mut ukf = Ukf::new(Vector2::new(0.4, 0.0), Matrix2::identity() * 0.1);
+/// let mut steps = Vec::new();
+/// for k in 0..100 {
+///     let z = Vector1::new((0.5 * (3.13 * k as f64 * 0.01).cos()).sin());
+///     let cross = ukf.predict_with_cross(&Pendulum, &q, 0.01)?;
+///     let predicted = Estimate { x: *ukf.state(), p: *ukf.covariance() };
+///     ukf.update(&Pendulum, &z, &r)?;
+///     let filtered = Estimate { x: *ukf.state(), p: *ukf.covariance() };
+///     steps.push(CrossStep { cross, predicted, filtered });
+/// }
+/// let mut smoothed = vec![steps[0].filtered; steps.len()];
+/// smooth_with_cross(&steps, &mut smoothed)?;
+/// # Ok::<(), typed_kalman::KalmanError>(())
+/// ```
+pub fn smooth_with_cross<const N: usize, T: Float>(
+    steps: &[CrossStep<N, T>],
+    out: &mut [Estimate<N, T>],
+) -> Result<(), KalmanError> {
+    backward(
+        steps.len(),
+        out,
+        |k| {
+            (
+                steps[k].filtered,
+                steps[k + 1].predicted,
+                steps[k + 1].cross,
+            )
+        },
+        |k| steps[k].filtered,
+    )
+}
+
+/// The RTS backward pass shared by both smoothers. `link(k)` returns step `k`'s filtered
+/// estimate, step `k + 1`'s predicted estimate, and the cross-covariance between them;
+/// `filtered(k)` returns step `k`'s filtered estimate.
+fn backward<const N: usize, T: Float>(
+    len: usize,
+    out: &mut [Estimate<N, T>],
+    link: impl Fn(usize) -> (Estimate<N, T>, Estimate<N, T>, SMatrix<T, N, N>),
+    filtered: impl Fn(usize) -> Estimate<N, T>,
+) -> Result<(), KalmanError> {
+    if len != out.len() {
         return Err(KalmanError::InvalidInput);
     }
-    let Some(last) = steps.last() else {
+    if len == 0 {
         return Ok(());
-    };
-    out[out.len() - 1] = last.filtered;
+    }
+    out[len - 1] = filtered(len - 1);
 
-    for k in (0..steps.len() - 1).rev() {
-        let (current, next) = (&steps[k], &steps[k + 1]);
+    for k in (0..len - 1).rev() {
+        let (current, next_predicted, cross) = link(k);
         let smoothed_next = out[k + 1];
 
-        // C = P_filt Fᵀ P_pred⁻¹, computed as (P_pred⁻¹ F P_filt)ᵀ since both are symmetric.
+        // G = C P_pred⁻¹, computed as (P_pred⁻¹ Cᵀ)ᵀ since P_pred is symmetric.
         let p_pred =
-            Cholesky::new(next.predicted.p).ok_or(KalmanError::CovarianceNotPositiveDefinite)?;
-        let c = p_pred.solve(&(next.f * current.filtered.p)).transpose();
+            Cholesky::new(next_predicted.p).ok_or(KalmanError::CovarianceNotPositiveDefinite)?;
+        let g = p_pred.solve(&cross.transpose()).transpose();
 
-        let x = current.filtered.x + c * (smoothed_next.x - next.predicted.x);
-        let p = symmetrize(
-            current.filtered.p + c * (smoothed_next.p - next.predicted.p) * c.transpose(),
-        );
+        let x = current.x + g * (smoothed_next.x - next_predicted.x);
+        let p = symmetrize(current.p + g * (smoothed_next.p - next_predicted.p) * g.transpose());
         if !all_finite(x.as_slice()) || !all_finite(p.as_slice()) {
             return Err(KalmanError::NumericalFailure);
         }

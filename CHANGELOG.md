@@ -8,6 +8,9 @@ All notable changes to this crate are documented here. The format follows
 
 ### Added
 
+- Unscented RTS smoother: `smoother::smooth_with_cross` over `CrossStep`s, with
+  `Ukf::predict_with_cross` reporting the cross-covariance it needs. It equals the linear RTS
+  smoother on linear problems; on a pendulum it halves the UKF's error.
 - Control inputs: `LinearKf::predict_with_input` and `SqrtKf::predict_with_input`
   (`x = F x + B u`), and `ControlledProcess` / `ControlledJacobian` with the `WithInput` adapter,
   which works with every model-based filter.

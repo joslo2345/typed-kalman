@@ -273,20 +273,52 @@ impl<const N: usize, T: Float> Ukf<N, T> {
         q: &SMatrix<T, N, N>,
         dt: T,
     ) -> Result<(), KalmanError> {
+        self.predict_impl::<P, false>(model, q, dt).map(|_| ())
+    }
+
+    /// Like [`predict`](Self::predict), and also returns the cross-covariance between the
+    /// state before and after the prediction, which the unscented RTS smoother needs (see
+    /// [`smooth_with_cross`](crate::smoother::smooth_with_cross)).
+    pub fn predict_with_cross<P: ProcessModel<N, T>>(
+        &mut self,
+        model: &P,
+        q: &SMatrix<T, N, N>,
+        dt: T,
+    ) -> Result<SMatrix<T, N, N>, KalmanError> {
+        self.predict_impl::<P, true>(model, q, dt)
+    }
+
+    /// The prediction behind both public methods. With `CROSS` off, the cross-covariance is
+    /// skipped (and zero is returned), so a plain predict pays nothing for it.
+    fn predict_impl<P: ProcessModel<N, T>, const CROSS: bool>(
+        &mut self,
+        model: &P,
+        q: &SMatrix<T, N, N>,
+        dt: T,
+    ) -> Result<SMatrix<T, N, N>, KalmanError> {
         let w = &self.weights;
+        let residual = |a: &SVector<T, N>, b: &SVector<T, N>| model.state_residual(a, b);
+        let prior = SigmaPoints::draw(&self.x, &self.p, w)?;
         // State deviations go through the model's state residual, so wrapped states work.
-        let (x, dx) = SigmaPoints::draw(&self.x, &self.p, w)?
+        let (x, dx) = prior
             .map(|s| model.predict(s, dt))
-            .residual_moments(w, |a, b| model.state_residual(a, b));
+            .residual_moments(w, residual);
         let zero = SVector::<T, N>::zeros();
         let p = symmetrize(dx.cross_covariance(&zero, &dx, &zero, w) + q);
+        let cross = if CROSS {
+            let (_, prior_dx) = prior.residual_moments(w, residual);
+            prior_dx.cross_covariance(&zero, &dx, &zero, w)
+        } else {
+            SMatrix::zeros()
+        };
 
-        if !all_finite(x.as_slice()) || !all_finite(p.as_slice()) {
+        let finite = all_finite(x.as_slice()) && all_finite(p.as_slice());
+        if !finite || !all_finite(cross.as_slice()) {
             return Err(KalmanError::NumericalFailure);
         }
         self.x = x;
         self.p = p;
-        Ok(())
+        Ok(cross)
     }
 
     /// Corrects the estimate with measurement `z` and measurement noise `r`, using a
