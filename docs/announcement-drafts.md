@@ -1,7 +1,7 @@
 # Announcement drafts for typed-kalman 0.1.0
 
 Drafts for the three places the plan names. Post them only after `cargo publish` succeeds and
-the repository is public. Replace `<REPO_URL>` with the repository's address first. Every
+the repository is public. Replace `https://github.com/joslo2345/typed-kalman` with the repository's address first. Every
 number below was measured in this repo; keep them in sync if anything changes before release.
 
 ---
@@ -15,7 +15,7 @@ matrices.
 
 - crates.io: https://crates.io/crates/typed-kalman
 - docs: https://docs.rs/typed-kalman
-- repo: <REPO_URL>
+- repo: https://github.com/joslo2345/typed-kalman
 
 **What it does**
 
@@ -98,7 +98,7 @@ The firmware crate in the repo already reads the DWT cycle counter, but I haven'
 board yet. **If anyone has a Nucleo-F446RE (or another M4F) and a probe, I'd love cycle counts**:
 `bench/firmware` has the two images, and the result lands in a `CYCLES_PER_STEP` static.
 
-crates.io: https://crates.io/crates/typed-kalman · repo: <REPO_URL>
+crates.io: https://crates.io/crates/typed-kalman · repo: https://github.com/joslo2345/typed-kalman
 
 ---
 
@@ -133,7 +133,7 @@ A few things I learned building it, in case they're useful:
   the covariance: P's condition number passes 1e16. A square-root filter handles them, because
   its factor has the square root of that condition number.
 
-Docs: https://docs.rs/typed-kalman · Repo: <REPO_URL>
+Docs: https://docs.rs/typed-kalman · Repo: https://github.com/joslo2345/typed-kalman
 
 Feedback very welcome, especially on the model-trait API and how you'd like angle wrapping for
 residuals to work.

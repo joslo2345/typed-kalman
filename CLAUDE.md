@@ -128,7 +128,7 @@ Publishing to crates.io is public and permanent (versions can be yanked, never d
 3. `cargo publish`. It needs a crates.io token (`cargo login`).
 4. The guide says to announce on the Rust users forum, the Rust Embedded community and r/rust. Draft the posts for the user; never post them yourself.
 
-Status of 0.1.0: prepared (changelog, metadata, release config, dry run passing), not published. `Cargo.toml` has no `repository` URL yet because the repo has no remote; add it once there is one.
+Status of 0.1.0: prepared (changelog, metadata, release config, dry run passing), not published. The repository is https://github.com/joslo2345/typed-kalman (public).
 
 ## Resolved inconsistencies in the guide
 
