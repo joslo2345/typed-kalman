@@ -4,9 +4,11 @@
 #![allow(dead_code, unused_imports)]
 
 pub mod baseline;
+pub mod catalog;
 pub mod naive;
 pub mod rng;
 pub mod scenarios;
+pub mod vectors;
 
 use kalman_rs::linear::LinearKf;
 use scenarios::Scenario;

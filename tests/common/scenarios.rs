@@ -200,3 +200,115 @@ pub fn beyond_f32() -> Scenario<4, 2> {
         &mut Rng::new(4),
     )
 }
+
+/// Discrete white-noise-acceleration process noise for one constant-velocity axis, with
+/// acceleration spectral density `q`: `q [[dt³/3, dt²/2], [dt²/2, dt]]`.
+fn wna_axis(q: f64, dt: f64) -> Matrix2<f64> {
+    Matrix2::new(dt.powi(3) / 3.0, dt.powi(2) / 2.0, dt.powi(2) / 2.0, dt) * q
+}
+
+/// S1: a 1D constant-velocity target observed in position. State `[x, vx]`.
+pub fn s1(steps: usize, seed: u64) -> Scenario<2, 1> {
+    let dt = 0.1;
+    Scenario::simulate(
+        Matrix2::new(1.0, dt, 0.0, 1.0),
+        nalgebra::Matrix1x2::new(1.0, 0.0),
+        wna_axis(0.1, dt),
+        nalgebra::Matrix1::new(0.25),
+        nalgebra::Vector2::new(0.0, 1.0),
+        Matrix2::identity(),
+        steps,
+        &mut Rng::new(seed),
+    )
+}
+
+/// S2: a 2D constant-velocity target observed in position. State `[x, y, vx, vy]`.
+pub fn s2(steps: usize, seed: u64) -> Scenario<4, 2> {
+    constant_velocity(steps, seed)
+}
+
+/// Range and bearing from a sensor at the origin to a target at `[x, y, ...]`.
+pub fn range_bearing(x: &Vector4<f64>) -> nalgebra::Vector2<f64> {
+    nalgebra::Vector2::new(x[0].hypot(x[1]), x[1].atan2(x[0]))
+}
+
+/// S3: a 2D constant-velocity target tracked by range and bearing. State `[x, y, vx, vy]`.
+///
+/// The motion is linear and only the measurement is nonlinear, so `h` is unused (zero) and
+/// `zs` come from [`range_bearing`]. The target stays at `x > 0`, so bearings never come near
+/// ±π and no angle wrapping is needed.
+pub fn s3(steps: usize, seed: u64) -> Scenario<4, 2> {
+    let dt = 1.0;
+    let mut q = Matrix4::zeros();
+    let axis = wna_axis(0.01, dt);
+    for (i, j) in [(0, 2), (1, 3)] {
+        q[(i, i)] = axis[(0, 0)];
+        q[(i, j)] = axis[(0, 1)];
+        q[(j, i)] = axis[(1, 0)];
+        q[(j, j)] = axis[(1, 1)];
+    }
+    let mut sc = Scenario {
+        f: constant_velocity_f(dt),
+        h: Matrix2x4::zeros(),
+        q,
+        r: Matrix2::new(25.0, 0.0, 0.0, 1e-4),
+        x0: Vector4::new(10_000.0, 0.0, -1.0, 2.0),
+        p0: Matrix4::from_diagonal(&Vector4::new(100.0, 100.0, 1.0, 1.0)),
+        truth: Vec::with_capacity(steps),
+        zs: Vec::with_capacity(steps),
+    };
+    let mut rng = Rng::new(seed);
+    let (p0_l, q_l, r_l) = (factor(&sc.p0), factor(&sc.q), factor(&sc.r));
+    let mut x = sc.x0 + rng.correlated(&p0_l);
+    for _ in 0..steps {
+        x = sc.f * x + rng.correlated(&q_l);
+        sc.truth.push(x);
+        sc.zs.push(range_bearing(&x) + rng.correlated(&r_l));
+    }
+    sc
+}
+
+/// S4: the ill-conditioned single-precision stability problem ([`ill_conditioned`]).
+pub fn s4() -> Scenario<4, 2> {
+    ill_conditioned()
+}
+
+/// Returns `[a×]`, the matrix with `[a×] b = a × b`.
+fn skew(a: &nalgebra::Vector3<f64>) -> nalgebra::Matrix3<f64> {
+    nalgebra::Matrix3::new(0.0, -a[2], a[1], a[2], 0.0, -a[0], -a[1], a[0], 0.0)
+}
+
+/// S5: a 15-state INS error-state filter aided by GPS position and velocity.
+///
+/// State: position, velocity and attitude errors, then accelerometer and gyro biases (3 each).
+/// The vehicle is level and aligned with the navigation frame under gravity only, and the
+/// continuous model `δṗ = δv`, `δv̇ = -[f×] δψ - δb_a`, `δψ̇ = -δb_g`, with random-walk biases,
+/// is discretized to first order at 100 Hz.
+pub fn s5(steps: usize, seed: u64) -> Scenario<15, 6> {
+    use nalgebra::{Matrix3, SMatrix, SVector, Vector3};
+    let dt = 0.01;
+    let i3 = Matrix3::identity();
+    let specific_force = Vector3::new(0.0, 0.0, -9.81);
+
+    let mut a = SMatrix::<f64, 15, 15>::zeros();
+    a.fixed_view_mut::<3, 3>(0, 3).copy_from(&i3);
+    a.fixed_view_mut::<3, 3>(3, 6)
+        .copy_from(&-skew(&specific_force));
+    a.fixed_view_mut::<3, 3>(3, 9).copy_from(&-i3);
+    a.fixed_view_mut::<3, 3>(6, 12).copy_from(&-i3);
+    let f = SMatrix::<f64, 15, 15>::identity() + a * dt;
+
+    let mut h = SMatrix::<f64, 6, 15>::zeros();
+    h.fixed_view_mut::<6, 6>(0, 0)
+        .copy_from(&SMatrix::<f64, 6, 6>::identity());
+
+    // Noise densities: position (regularization only), accelerometer, gyro, and bias walks.
+    let densities = [1e-12, 1e-4, 1e-8, 1e-10, 1e-12];
+    let q = SMatrix::<f64, 15, 15>::from_diagonal(&SVector::from_fn(|i, _| densities[i / 3] * dt));
+    let r = SMatrix::<f64, 6, 6>::from_diagonal(&SVector::from_column_slice(&[
+        1.0, 1.0, 1.0, 0.01, 0.01, 0.01,
+    ]));
+    let prior = [10.0, 1.0, 1e-4, 1e-4, 1e-8];
+    let p0 = SMatrix::<f64, 15, 15>::from_diagonal(&SVector::from_fn(|i, _| prior[i / 3]));
+    Scenario::simulate(f, h, q, r, SVector::zeros(), p0, steps, &mut Rng::new(seed))
+}

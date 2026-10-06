@@ -79,7 +79,9 @@ CI runs tests on stable, beta, and the MSRV, plus clippy, fmt, the thumbv7em `no
 
 ## Benchmarks
 
-- Five frozen scenarios (S1–S5) are shared across sibling C, C++, Python, and Rust implementations through a test-vectors Git submodule at `tests/vectors/`. Don't change scenario files after results have been collected.
+- Five frozen scenarios (S1–S5) live in `tests/vectors/` (format in `tests/vectors/README.md`: `model.json` plus raw little-endian arrays). The guide wants them in a shared test-vectors repo, added as a Git submodule at `tests/vectors/`; that repo doesn't exist yet, so for now this repo generates and holds them. Don't change scenario files after results have been collected.
+- `tests/common/catalog.rs` defines exactly what each file contains (seeds, runs, dtype). `examples/generate_vectors.rs` writes the files from it, and `tests/vectors.rs` checks them bit for bit. If you change the catalog deliberately, regenerate the files and `SHA256SUMS` (`cd tests/vectors && shasum -a 256 S*/* > SHA256SUMS`). Load scenarios with `common::vectors::load::<N, M>("S2")`.
+- S3 must stay away from the bearing wrap at ±π, because the filters don't wrap residuals. The first S3 draft started at 2 km and random-walked to x < 0, which is why it now starts at 10 km.
 - Criterion group names must be `<Scenario>_<Filter>_<precision>` (e.g. `S2_KF_float64`) and function names must be the library name, because `scripts/criterion_to_csv.py` parses them from `target/criterion/`.
 - Results are appended to `results/results.csv` using the schema `library,library_version,scenario,filter,precision,metric,value,unit,commit,cpu,os,toolchain,date`. `make_table.py` writes the README table between `<!-- BENCH:START -->` and `<!-- BENCH:END -->`.
 - Benchmark `adskalman` with all three `CovarianceUpdateMethod`s. A feature a baseline lacks is reported as "n/a", never as a failure.
