@@ -8,20 +8,22 @@
 //!   chi-squared with `N` degrees of freedom for an `N`-dimensional state.
 //!
 //! Average either statistic over Monte Carlo runs (or time steps) and compare the average with
-//! [`chi_squared_bounds`].
+//! [`chi_squared_bounds`]. The bounds are always computed in `f64`; convert an `f32` average
+//! with `f64::from` before checking it.
 
 use nalgebra::{Cholesky, ComplexField, SMatrix, SVector};
 
 use crate::error::KalmanError;
+use crate::scalar::Float;
 
 /// Returns the normalized estimation error squared, `(x_true - x_est)ᵀ P⁻¹ (x_true - x_est)`.
 ///
 /// Returns [`KalmanError::CovarianceNotPositiveDefinite`] if `p` can't be inverted.
-pub fn nees<const N: usize>(
-    x_true: &SVector<f64, N>,
-    x_est: &SVector<f64, N>,
-    p: &SMatrix<f64, N, N>,
-) -> Result<f64, KalmanError> {
+pub fn nees<const N: usize, T: Float>(
+    x_true: &SVector<T, N>,
+    x_est: &SVector<T, N>,
+    p: &SMatrix<T, N, N>,
+) -> Result<T, KalmanError> {
     let chol = Cholesky::new(*p).ok_or(KalmanError::CovarianceNotPositiveDefinite)?;
     let e = x_true - x_est;
     Ok(e.dot(&chol.solve(&e)))
@@ -193,7 +195,7 @@ mod tests {
 
     #[test]
     fn nees_rejects_a_singular_covariance() {
-        let result = nees(&Vector2::zeros(), &Vector2::zeros(), &Matrix2::zeros());
+        let result = nees::<2, f64>(&Vector2::zeros(), &Vector2::zeros(), &Matrix2::zeros());
         assert_eq!(result, Err(KalmanError::CovarianceNotPositiveDefinite));
     }
 

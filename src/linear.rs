@@ -3,6 +3,7 @@
 use nalgebra::{SMatrix, SVector};
 
 use crate::error::KalmanError;
+use crate::scalar::Float;
 use crate::update::{self, symmetrize};
 
 /// A linear Kalman filter over an `N`-dimensional state.
@@ -10,29 +11,29 @@ use crate::update::{self, symmetrize};
 /// The model matrices are passed to each [`predict`](Self::predict) and
 /// [`update`](Self::update) call, so time-varying models need no extra setup.
 #[derive(Debug, Clone, PartialEq)]
-pub struct LinearKf<const N: usize> {
-    x: SVector<f64, N>,
-    p: SMatrix<f64, N, N>,
+pub struct LinearKf<const N: usize, T: Float = f64> {
+    x: SVector<T, N>,
+    p: SMatrix<T, N, N>,
 }
 
-impl<const N: usize> LinearKf<N> {
+impl<const N: usize, T: Float> LinearKf<N, T> {
     /// Creates a filter with initial state `x` and covariance `p`.
-    pub fn new(x: SVector<f64, N>, p: SMatrix<f64, N, N>) -> Self {
+    pub fn new(x: SVector<T, N>, p: SMatrix<T, N, N>) -> Self {
         Self { x, p }
     }
 
     /// Returns the current state estimate.
-    pub fn state(&self) -> &SVector<f64, N> {
+    pub fn state(&self) -> &SVector<T, N> {
         &self.x
     }
 
     /// Returns the current state covariance.
-    pub fn covariance(&self) -> &SMatrix<f64, N, N> {
+    pub fn covariance(&self) -> &SMatrix<T, N, N> {
         &self.p
     }
 
     /// Propagates the state with transition matrix `f` and process noise `q`.
-    pub fn predict(&mut self, f: &SMatrix<f64, N, N>, q: &SMatrix<f64, N, N>) {
+    pub fn predict(&mut self, f: &SMatrix<T, N, N>, q: &SMatrix<T, N, N>) {
         self.x = f * self.x;
         self.p = symmetrize(f * self.p * f.transpose() + q);
     }
@@ -43,10 +44,10 @@ impl<const N: usize> LinearKf<N> {
     /// Returns the normalized innovation squared (NIS). On error the filter is unchanged.
     pub fn update<const M: usize>(
         &mut self,
-        h: &SMatrix<f64, M, N>,
-        z: &SVector<f64, M>,
-        r: &SMatrix<f64, M, M>,
-    ) -> Result<f64, KalmanError> {
+        h: &SMatrix<T, M, N>,
+        z: &SVector<T, M>,
+        r: &SMatrix<T, M, M>,
+    ) -> Result<T, KalmanError> {
         let y = z - h * self.x;
         let corrected = update::joseph(&self.x, &self.p, h, &y, r)?;
         self.x = corrected.x;
@@ -55,7 +56,7 @@ impl<const N: usize> LinearKf<N> {
     }
 }
 
-impl<const N: usize> Default for LinearKf<N> {
+impl<const N: usize, T: Float> Default for LinearKf<N, T> {
     /// Returns a filter with a zero state and an identity covariance.
     fn default() -> Self {
         Self::new(SVector::zeros(), SMatrix::identity())

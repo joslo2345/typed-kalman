@@ -4,6 +4,7 @@ use nalgebra::{Cholesky, ComplexField, SMatrix, SVector};
 
 use crate::error::KalmanError;
 use crate::model::{MeasurementModel, ProcessModel};
+use crate::scalar::{lit, Float};
 use crate::update::{all_finite, symmetrize};
 
 /// Parameters of the scaled unscented transform.
@@ -33,18 +34,18 @@ impl Default for UkfParams {
 
 /// Sigma-point weights derived from [`UkfParams`] for an `N`-dimensional state.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) struct Weights {
+pub(crate) struct Weights<T: Float> {
     /// Mean weight of the center point.
-    pub mean0: f64,
+    pub mean0: T,
     /// Covariance weight of the center point.
-    pub cov0: f64,
+    pub cov0: T,
     /// Mean and covariance weight of every other point.
-    pub rest: f64,
+    pub rest: T,
     /// Distance of the outer points from the mean, in standard deviations.
-    pub gamma: f64,
+    pub gamma: T,
 }
 
-impl Weights {
+impl<T: Float> Weights<T> {
     /// Validates `params` and derives the weights.
     pub(crate) fn new<const N: usize>(params: &UkfParams) -> Result<Self, KalmanError> {
         let UkfParams { alpha, beta, kappa } = *params;
@@ -56,17 +57,18 @@ impl Weights {
         Ok(Self::unchecked::<N>(params))
     }
 
-    /// Derives the weights without validating `params`.
+    /// Derives the weights without validating `params`. They're computed in `f64` and then
+    /// converted, so `f32` filters get correctly rounded weights.
     pub(crate) fn unchecked<const N: usize>(params: &UkfParams) -> Self {
         let UkfParams { alpha, beta, kappa } = *params;
         let n_plus_lambda = alpha * alpha * (N as f64 + kappa);
         let mean0 = (n_plus_lambda - N as f64) / n_plus_lambda;
         Self {
-            mean0,
-            cov0: mean0 + 1.0 - alpha * alpha + beta,
-            rest: 0.5 / n_plus_lambda,
+            mean0: lit(mean0),
+            cov0: lit(mean0 + 1.0 - alpha * alpha + beta),
+            rest: lit(0.5 / n_plus_lambda),
             // Through nalgebra so it uses libm when `std` is off.
-            gamma: ComplexField::sqrt(n_plus_lambda),
+            gamma: lit(ComplexField::sqrt(n_plus_lambda)),
         }
     }
 }
@@ -76,15 +78,15 @@ impl Weights {
 /// Point `i` of `plus` and `minus` lies at `±gamma` times column `i` of the covariance's
 /// Cholesky factor. Storing them as two `D × N` matrices avoids needing `2N + 1` as a const
 /// generic, which stable Rust doesn't support.
-pub(crate) struct SigmaPoints<const D: usize, const N: usize> {
-    pub center: SVector<f64, D>,
-    pub plus: SMatrix<f64, D, N>,
-    pub minus: SMatrix<f64, D, N>,
+pub(crate) struct SigmaPoints<const D: usize, const N: usize, T: Float> {
+    pub center: SVector<T, D>,
+    pub plus: SMatrix<T, D, N>,
+    pub minus: SMatrix<T, D, N>,
 }
 
-impl<const N: usize> SigmaPoints<N, N> {
+impl<const N: usize, T: Float> SigmaPoints<N, N, T> {
     /// Draws sigma points around mean `x` with covariance `p`.
-    fn draw(x: &SVector<f64, N>, p: &SMatrix<f64, N, N>, w: &Weights) -> Result<Self, KalmanError> {
+    fn draw(x: &SVector<T, N>, p: &SMatrix<T, N, N>, w: &Weights<T>) -> Result<Self, KalmanError> {
         let l = Cholesky::new(*p)
             .ok_or(KalmanError::CovarianceNotPositiveDefinite)?
             .unpack();
@@ -93,10 +95,10 @@ impl<const N: usize> SigmaPoints<N, N> {
 
     /// Draws sigma points around mean `x` from a square root `l` of the covariance
     /// (any matrix with `P = L Lᵀ`).
-    pub(crate) fn from_factor(x: &SVector<f64, N>, l: &SMatrix<f64, N, N>, w: &Weights) -> Self {
+    pub(crate) fn from_factor(x: &SVector<T, N>, l: &SMatrix<T, N, N>, w: &Weights<T>) -> Self {
         let l = l * w.gamma;
-        let mut plus = SMatrix::<f64, N, N>::zeros();
-        let mut minus = SMatrix::<f64, N, N>::zeros();
+        let mut plus = SMatrix::<T, N, N>::zeros();
+        let mut minus = SMatrix::<T, N, N>::zeros();
         for i in 0..N {
             plus.set_column(i, &(x + l.column(i)));
             minus.set_column(i, &(x - l.column(i)));
@@ -109,14 +111,14 @@ impl<const N: usize> SigmaPoints<N, N> {
     }
 }
 
-impl<const D: usize, const N: usize> SigmaPoints<D, N> {
+impl<const D: usize, const N: usize, T: Float> SigmaPoints<D, N, T> {
     /// Passes every point through `g`.
     pub(crate) fn map<const E: usize>(
         &self,
-        g: impl Fn(&SVector<f64, D>) -> SVector<f64, E>,
-    ) -> SigmaPoints<E, N> {
-        let mut plus = SMatrix::<f64, E, N>::zeros();
-        let mut minus = SMatrix::<f64, E, N>::zeros();
+        g: impl Fn(&SVector<T, D>) -> SVector<T, E>,
+    ) -> SigmaPoints<E, N, T> {
+        let mut plus = SMatrix::<T, E, N>::zeros();
+        let mut minus = SMatrix::<T, E, N>::zeros();
         for i in 0..N {
             plus.set_column(i, &g(&self.plus.column(i).into_owned()));
             minus.set_column(i, &g(&self.minus.column(i).into_owned()));
@@ -129,8 +131,8 @@ impl<const D: usize, const N: usize> SigmaPoints<D, N> {
     }
 
     /// Returns the weighted mean of the points.
-    pub(crate) fn mean(&self, w: &Weights) -> SVector<f64, D> {
-        let mut sum = SVector::<f64, D>::zeros();
+    pub(crate) fn mean(&self, w: &Weights<T>) -> SVector<T, D> {
+        let mut sum = SVector::<T, D>::zeros();
         for i in 0..N {
             sum += self.plus.column(i) + self.minus.column(i);
         }
@@ -141,13 +143,13 @@ impl<const D: usize, const N: usize> SigmaPoints<D, N> {
     /// `other` (around `other_mean`).
     pub(crate) fn cross_covariance<const E: usize>(
         &self,
-        mean: &SVector<f64, D>,
-        other: &SigmaPoints<E, N>,
-        other_mean: &SVector<f64, E>,
-        w: &Weights,
-    ) -> SMatrix<f64, D, E> {
-        let outer = |a: SVector<f64, D>, b: SVector<f64, E>| a * b.transpose();
-        let mut sum = SMatrix::<f64, D, E>::zeros();
+        mean: &SVector<T, D>,
+        other: &SigmaPoints<E, N, T>,
+        other_mean: &SVector<T, E>,
+        w: &Weights<T>,
+    ) -> SMatrix<T, D, E> {
+        let outer = |a: SVector<T, D>, b: SVector<T, E>| a * b.transpose();
+        let mut sum = SMatrix::<T, D, E>::zeros();
         for i in 0..N {
             sum += outer(
                 self.plus.column(i) - mean,
@@ -169,16 +171,16 @@ impl<const D: usize, const N: usize> SigmaPoints<D, N> {
 /// [`KalmanError::CovarianceNotPositiveDefinite`] if the covariance can't be factored, and the
 /// filter is left unchanged on any error.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Ukf<const N: usize> {
-    x: SVector<f64, N>,
-    p: SMatrix<f64, N, N>,
-    weights: Weights,
+pub struct Ukf<const N: usize, T: Float = f64> {
+    x: SVector<T, N>,
+    p: SMatrix<T, N, N>,
+    weights: Weights<T>,
 }
 
-impl<const N: usize> Ukf<N> {
+impl<const N: usize, T: Float> Ukf<N, T> {
     /// Creates a filter with initial state `x`, covariance `p` and the default
     /// [`UkfParams`].
-    pub fn new(x: SVector<f64, N>, p: SMatrix<f64, N, N>) -> Self {
+    pub fn new(x: SVector<T, N>, p: SMatrix<T, N, N>) -> Self {
         Self {
             x,
             p,
@@ -191,8 +193,8 @@ impl<const N: usize> Ukf<N> {
     /// Returns [`KalmanError::InvalidInput`] if `alpha` isn't positive or
     /// `alpha² (N + kappa)` isn't positive.
     pub fn with_params(
-        x: SVector<f64, N>,
-        p: SMatrix<f64, N, N>,
+        x: SVector<T, N>,
+        p: SMatrix<T, N, N>,
         params: UkfParams,
     ) -> Result<Self, KalmanError> {
         Ok(Self {
@@ -203,21 +205,21 @@ impl<const N: usize> Ukf<N> {
     }
 
     /// Returns the current state estimate.
-    pub fn state(&self) -> &SVector<f64, N> {
+    pub fn state(&self) -> &SVector<T, N> {
         &self.x
     }
 
     /// Returns the current state covariance.
-    pub fn covariance(&self) -> &SMatrix<f64, N, N> {
+    pub fn covariance(&self) -> &SMatrix<T, N, N> {
         &self.p
     }
 
     /// Propagates the state and covariance through `model` with process noise `q`.
-    pub fn predict<P: ProcessModel<N>>(
+    pub fn predict<P: ProcessModel<N, T>>(
         &mut self,
         model: &P,
-        q: &SMatrix<f64, N, N>,
-        dt: f64,
+        q: &SMatrix<T, N, N>,
+        dt: T,
     ) -> Result<(), KalmanError> {
         let w = &self.weights;
         let points = SigmaPoints::draw(&self.x, &self.p, w)?.map(|s| model.predict(s, dt));
@@ -235,12 +237,12 @@ impl<const N: usize> Ukf<N> {
     /// Corrects the estimate with measurement `z` and measurement noise `r`.
     ///
     /// Returns the normalized innovation squared (NIS).
-    pub fn update<H: MeasurementModel<N, M>, const M: usize>(
+    pub fn update<H: MeasurementModel<N, M, T>, const M: usize>(
         &mut self,
         model: &H,
-        z: &SVector<f64, M>,
-        r: &SMatrix<f64, M, M>,
-    ) -> Result<f64, KalmanError> {
+        z: &SVector<T, M>,
+        r: &SMatrix<T, M, M>,
+    ) -> Result<T, KalmanError> {
         if !all_finite(z.as_slice()) || !all_finite(r.as_slice()) {
             return Err(KalmanError::InvalidInput);
         }

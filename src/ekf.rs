@@ -4,33 +4,34 @@ use nalgebra::{SMatrix, SVector};
 
 use crate::error::KalmanError;
 use crate::model::{MeasurementJacobian, ProcessJacobian};
+use crate::scalar::Float;
 use crate::update::{self, symmetrize};
 
 /// An extended Kalman filter over an `N`-dimensional state.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Ekf<const N: usize> {
-    x: SVector<f64, N>,
-    p: SMatrix<f64, N, N>,
+pub struct Ekf<const N: usize, T: Float = f64> {
+    x: SVector<T, N>,
+    p: SMatrix<T, N, N>,
 }
 
-impl<const N: usize> Ekf<N> {
+impl<const N: usize, T: Float> Ekf<N, T> {
     /// Creates a filter with initial state `x` and covariance `p`.
-    pub fn new(x: SVector<f64, N>, p: SMatrix<f64, N, N>) -> Self {
+    pub fn new(x: SVector<T, N>, p: SMatrix<T, N, N>) -> Self {
         Self { x, p }
     }
 
     /// Returns the current state estimate.
-    pub fn state(&self) -> &SVector<f64, N> {
+    pub fn state(&self) -> &SVector<T, N> {
         &self.x
     }
 
     /// Returns the current state covariance.
-    pub fn covariance(&self) -> &SMatrix<f64, N, N> {
+    pub fn covariance(&self) -> &SMatrix<T, N, N> {
         &self.p
     }
 
     /// Propagates the state and covariance through `model` with process noise `q`.
-    pub fn predict<P: ProcessJacobian<N>>(&mut self, model: &P, q: &SMatrix<f64, N, N>, dt: f64) {
+    pub fn predict<P: ProcessJacobian<N, T>>(&mut self, model: &P, q: &SMatrix<T, N, N>, dt: T) {
         let f = model.jacobian(&self.x, dt);
         self.x = model.predict(&self.x, dt);
         self.p = symmetrize(f * self.p * f.transpose() + q);
@@ -40,12 +41,12 @@ impl<const N: usize> Ekf<N> {
     /// Joseph-form covariance update.
     ///
     /// Returns the normalized innovation squared (NIS). On error the filter is unchanged.
-    pub fn update<H: MeasurementJacobian<N, M>, const M: usize>(
+    pub fn update<H: MeasurementJacobian<N, M, T>, const M: usize>(
         &mut self,
         model: &H,
-        z: &SVector<f64, M>,
-        r: &SMatrix<f64, M, M>,
-    ) -> Result<f64, KalmanError> {
+        z: &SVector<T, M>,
+        r: &SMatrix<T, M, M>,
+    ) -> Result<T, KalmanError> {
         let h = model.jacobian(&self.x);
         let y = z - model.measure(&self.x);
         let corrected = update::joseph(&self.x, &self.p, &h, &y, r)?;

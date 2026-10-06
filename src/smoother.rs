@@ -10,29 +10,30 @@
 use nalgebra::{Cholesky, SMatrix, SVector};
 
 use crate::error::KalmanError;
+use crate::scalar::Float;
 use crate::update::{all_finite, symmetrize};
 
 /// A state estimate and its covariance.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Estimate<const N: usize> {
+pub struct Estimate<const N: usize, T: Float = f64> {
     /// State estimate.
-    pub x: SVector<f64, N>,
+    pub x: SVector<T, N>,
     /// State covariance.
-    pub p: SMatrix<f64, N, N>,
+    pub p: SMatrix<T, N, N>,
 }
 
 /// What the smoother needs from one step of forward filtering.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct RtsStep<const N: usize> {
+pub struct RtsStep<const N: usize, T: Float = f64> {
     /// The transition matrix that predicted this step from the previous one. Ignored for the
     /// first step.
-    pub f: SMatrix<f64, N, N>,
+    pub f: SMatrix<T, N, N>,
     /// The estimate after predicting this step, before its measurement update. For the first
     /// step, the prior.
-    pub predicted: Estimate<N>,
+    pub predicted: Estimate<N, T>,
     /// The estimate after this step's measurement update. If a step had no measurement, this
     /// equals `predicted`.
-    pub filtered: Estimate<N>,
+    pub filtered: Estimate<N, T>,
 }
 
 /// Runs the RTS smoother backward over `steps`, writing the smoothed estimate of each step to
@@ -41,9 +42,9 @@ pub struct RtsStep<const N: usize> {
 /// Returns [`KalmanError::InvalidInput`] if `out` and `steps` differ in length, or
 /// [`KalmanError::CovarianceNotPositiveDefinite`] if a predicted covariance can't be inverted.
 /// The contents of `out` are unspecified after an error.
-pub fn smooth<const N: usize>(
-    steps: &[RtsStep<N>],
-    out: &mut [Estimate<N>],
+pub fn smooth<const N: usize, T: Float>(
+    steps: &[RtsStep<N, T>],
+    out: &mut [Estimate<N, T>],
 ) -> Result<(), KalmanError> {
     if steps.len() != out.len() {
         return Err(KalmanError::InvalidInput);
@@ -206,7 +207,7 @@ mod tests {
 
     #[test]
     fn empty_history_is_fine() {
-        smooth::<2>(&[], &mut []).unwrap();
+        smooth::<2, f64>(&[], &mut []).unwrap();
     }
 
     #[test]

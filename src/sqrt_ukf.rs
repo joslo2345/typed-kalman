@@ -4,6 +4,7 @@ use nalgebra::{Cholesky, ComplexField, SMatrix, SVector};
 
 use crate::error::KalmanError;
 use crate::model::{MeasurementModel, ProcessModel};
+use crate::scalar::Float;
 use crate::ukf::{SigmaPoints, UkfParams, Weights};
 use crate::update::all_finite;
 
@@ -18,17 +19,17 @@ use crate::update::all_finite;
 /// as the Cholesky factor. `G` may have any number of columns, so singular noise is fine.
 /// The filter is left unchanged on any error.
 #[derive(Debug, Clone, PartialEq)]
-pub struct SqrtUkf<const N: usize> {
-    x: SVector<f64, N>,
-    s: SMatrix<f64, N, N>,
-    weights: Weights,
+pub struct SqrtUkf<const N: usize, T: Float = f64> {
+    x: SVector<T, N>,
+    s: SMatrix<T, N, N>,
+    weights: Weights<T>,
 }
 
-impl<const N: usize> SqrtUkf<N> {
+impl<const N: usize, T: Float> SqrtUkf<N, T> {
     /// Creates a filter with initial state `x`, covariance `p` and the default [`UkfParams`].
     ///
     /// Returns [`KalmanError::CovarianceNotPositiveDefinite`] if `p` can't be factored.
-    pub fn new(x: SVector<f64, N>, p: SMatrix<f64, N, N>) -> Result<Self, KalmanError> {
+    pub fn new(x: SVector<T, N>, p: SMatrix<T, N, N>) -> Result<Self, KalmanError> {
         Self::with_weights(x, p, Weights::unchecked::<N>(&UkfParams::default()))
     }
 
@@ -38,17 +39,17 @@ impl<const N: usize> SqrtUkf<N> {
     /// [`Ukf::with_params`](crate::ukf::Ukf::with_params)), or
     /// [`KalmanError::CovarianceNotPositiveDefinite`] if `p` can't be factored.
     pub fn with_params(
-        x: SVector<f64, N>,
-        p: SMatrix<f64, N, N>,
+        x: SVector<T, N>,
+        p: SMatrix<T, N, N>,
         params: UkfParams,
     ) -> Result<Self, KalmanError> {
         Self::with_weights(x, p, Weights::new::<N>(&params)?)
     }
 
     fn with_weights(
-        x: SVector<f64, N>,
-        p: SMatrix<f64, N, N>,
-        weights: Weights,
+        x: SVector<T, N>,
+        p: SMatrix<T, N, N>,
+        weights: Weights<T>,
     ) -> Result<Self, KalmanError> {
         let s = Cholesky::new(p)
             .ok_or(KalmanError::CovarianceNotPositiveDefinite)?
@@ -57,27 +58,27 @@ impl<const N: usize> SqrtUkf<N> {
     }
 
     /// Returns the current state estimate.
-    pub fn state(&self) -> &SVector<f64, N> {
+    pub fn state(&self) -> &SVector<T, N> {
         &self.x
     }
 
     /// Returns the lower-triangular square root `S` of the state covariance.
-    pub fn sqrt_covariance(&self) -> &SMatrix<f64, N, N> {
+    pub fn sqrt_covariance(&self) -> &SMatrix<T, N, N> {
         &self.s
     }
 
     /// Returns the state covariance `S Sᵀ`.
-    pub fn covariance(&self) -> SMatrix<f64, N, N> {
+    pub fn covariance(&self) -> SMatrix<T, N, N> {
         self.s * self.s.transpose()
     }
 
     /// Propagates the state and its covariance factor through `model`, with process noise
     /// `Q = q_sqrt q_sqrtᵀ`.
-    pub fn predict<P: ProcessModel<N>, const K: usize>(
+    pub fn predict<P: ProcessModel<N, T>, const K: usize>(
         &mut self,
         model: &P,
-        q_sqrt: &SMatrix<f64, N, K>,
-        dt: f64,
+        q_sqrt: &SMatrix<T, N, K>,
+        dt: T,
     ) -> Result<(), KalmanError> {
         let w = &self.weights;
         let points = SigmaPoints::from_factor(&self.x, &self.s, w).map(|s| model.predict(s, dt));
@@ -97,12 +98,12 @@ impl<const N: usize> SqrtUkf<N> {
     /// `R = r_sqrt r_sqrtᵀ`.
     ///
     /// Returns the normalized innovation squared (NIS).
-    pub fn update<H: MeasurementModel<N, M>, const M: usize, const K: usize>(
+    pub fn update<H: MeasurementModel<N, M, T>, const M: usize, const K: usize>(
         &mut self,
         model: &H,
-        z: &SVector<f64, M>,
-        r_sqrt: &SMatrix<f64, M, K>,
-    ) -> Result<f64, KalmanError> {
+        z: &SVector<T, M>,
+        r_sqrt: &SMatrix<T, M, K>,
+    ) -> Result<T, KalmanError> {
         if !all_finite(z.as_slice()) || !all_finite(r_sqrt.as_slice()) {
             return Err(KalmanError::InvalidInput);
         }
@@ -149,13 +150,13 @@ impl<const N: usize> SqrtUkf<N> {
 /// around `mean`, plus `noise_sqrt noise_sqrtᵀ`.
 ///
 /// Returns `None` if a negative center weight would make the result indefinite.
-fn weighted_factor<const D: usize, const N: usize, const K: usize>(
-    points: &SigmaPoints<D, N>,
-    mean: &SVector<f64, D>,
-    noise_sqrt: &SMatrix<f64, D, K>,
-    w: &Weights,
-) -> Option<SMatrix<f64, D, D>> {
-    let mut l = SMatrix::<f64, D, D>::zeros();
+fn weighted_factor<const D: usize, const N: usize, const K: usize, T: Float>(
+    points: &SigmaPoints<D, N, T>,
+    mean: &SVector<T, D>,
+    noise_sqrt: &SMatrix<T, D, K>,
+    w: &Weights<T>,
+) -> Option<SMatrix<T, D, D>> {
+    let mut l = SMatrix::<T, D, D>::zeros();
     let scale = ComplexField::sqrt(w.rest);
     for i in 0..N {
         update(&mut l, (points.plus.column(i) - mean) * scale);
@@ -166,7 +167,7 @@ fn weighted_factor<const D: usize, const N: usize, const K: usize>(
     }
 
     let center = points.center - mean;
-    if w.cov0 >= 0.0 {
+    if w.cov0 >= T::zero() {
         update(&mut l, center * ComplexField::sqrt(w.cov0));
     } else {
         downdate(&mut l, center * ComplexField::sqrt(-w.cov0))?;
@@ -178,11 +179,11 @@ fn weighted_factor<const D: usize, const N: usize, const K: usize>(
 ///
 /// Unlike the textbook update, this works when `l` has zeros on its diagonal, so a factor can
 /// be built up from a zero matrix.
-fn update<const D: usize>(l: &mut SMatrix<f64, D, D>, mut v: SVector<f64, D>) {
+fn update<const D: usize, T: Float>(l: &mut SMatrix<T, D, D>, mut v: SVector<T, D>) {
     for k in 0..D {
         let (lkk, vk) = (l[(k, k)], v[k]);
         let r = ComplexField::sqrt(lkk * lkk + vk * vk);
-        if r == 0.0 {
+        if r == T::zero() {
             continue;
         }
         let (c, s) = (lkk / r, vk / r);
@@ -198,11 +199,14 @@ fn update<const D: usize>(l: &mut SMatrix<f64, D, D>, mut v: SVector<f64, D>) {
 /// Replaces lower-triangular `l` with the factor of `l lᵀ - v vᵀ`, using hyperbolic rotations.
 ///
 /// Returns `None`, leaving `l` partially modified, if the result wouldn't be positive-definite.
-fn downdate<const D: usize>(l: &mut SMatrix<f64, D, D>, mut v: SVector<f64, D>) -> Option<()> {
+fn downdate<const D: usize, T: Float>(
+    l: &mut SMatrix<T, D, D>,
+    mut v: SVector<T, D>,
+) -> Option<()> {
     for k in 0..D {
         let (lkk, vk) = (l[(k, k)], v[k]);
         let r2 = lkk * lkk - vk * vk;
-        if r2 <= 0.0 || r2.is_nan() {
+        if !r2.is_finite() || r2 <= T::zero() {
             return None;
         }
         let r = ComplexField::sqrt(r2);

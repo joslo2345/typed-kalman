@@ -3,25 +3,26 @@
 use nalgebra::{Cholesky, SMatrix, SVector};
 
 use crate::error::KalmanError;
+use crate::scalar::{lit, Float};
 
 /// A corrected state and covariance, plus the normalized innovation squared.
-pub(crate) struct Corrected<const N: usize> {
-    pub x: SVector<f64, N>,
-    pub p: SMatrix<f64, N, N>,
-    pub nis: f64,
+pub(crate) struct Corrected<const N: usize, T: Float> {
+    pub x: SVector<T, N>,
+    pub p: SMatrix<T, N, N>,
+    pub nis: T,
 }
 
 /// Corrects `x` and `p` with innovation `y`, measurement Jacobian `h` and measurement noise `r`,
 /// using the Joseph-form covariance update.
 ///
 /// Does not modify anything, so callers can keep their state unchanged on error.
-pub(crate) fn joseph<const N: usize, const M: usize>(
-    x: &SVector<f64, N>,
-    p: &SMatrix<f64, N, N>,
-    h: &SMatrix<f64, M, N>,
-    y: &SVector<f64, M>,
-    r: &SMatrix<f64, M, M>,
-) -> Result<Corrected<N>, KalmanError> {
+pub(crate) fn joseph<const N: usize, const M: usize, T: Float>(
+    x: &SVector<T, N>,
+    p: &SMatrix<T, N, N>,
+    h: &SMatrix<T, M, N>,
+    y: &SVector<T, M>,
+    r: &SMatrix<T, M, M>,
+) -> Result<Corrected<N, T>, KalmanError> {
     if !all_finite(y.as_slice()) || !all_finite(r.as_slice()) {
         return Err(KalmanError::InvalidInput);
     }
@@ -31,7 +32,7 @@ pub(crate) fn joseph<const N: usize, const M: usize>(
 
     // K = P Hᵀ S⁻¹, computed as (S⁻¹ H P)ᵀ since S and P are symmetric.
     let k = s_chol.solve(&(h * p)).transpose();
-    let i_kh = SMatrix::<f64, N, N>::identity() - k * h;
+    let i_kh = SMatrix::<T, N, N>::identity() - k * h;
     let x = x + k * y;
     let p = symmetrize(i_kh * p * i_kh.transpose() + k * r * k.transpose());
     let nis = y.dot(&s_chol.solve(y));
@@ -43,11 +44,11 @@ pub(crate) fn joseph<const N: usize, const M: usize>(
 }
 
 /// Returns `(p + pᵀ) / 2`, removing the asymmetry that rounding errors introduce.
-pub(crate) fn symmetrize<const N: usize>(p: SMatrix<f64, N, N>) -> SMatrix<f64, N, N> {
-    (p + p.transpose()) * 0.5
+pub(crate) fn symmetrize<const N: usize, T: Float>(p: SMatrix<T, N, N>) -> SMatrix<T, N, N> {
+    (p + p.transpose()) * lit::<T>(0.5)
 }
 
 /// Returns whether every value is neither NaN nor infinite.
-pub(crate) fn all_finite(values: &[f64]) -> bool {
+pub(crate) fn all_finite<T: Float>(values: &[T]) -> bool {
     values.iter().all(|v| v.is_finite())
 }
