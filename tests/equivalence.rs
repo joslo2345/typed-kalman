@@ -7,10 +7,10 @@ mod common;
 
 use common::baseline::{self, Method, Models};
 use common::{scenarios, FromScenario};
-use kalman_rs::linear::LinearKf;
-use kalman_rs::smoother::{smooth, Estimate, RtsStep};
-use kalman_rs::SqrtKf;
 use nalgebra::Cholesky;
+use typed_kalman::linear::LinearKf;
+use typed_kalman::smoother::{smooth, Estimate, RtsStep};
+use typed_kalman::SqrtKf;
 
 #[test]
 fn matches_adskalman_on_constant_velocity() {

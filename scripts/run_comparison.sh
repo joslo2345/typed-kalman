@@ -17,4 +17,4 @@ cargo bench --bench compare
 python3 scripts/criterion_to_csv.py "$ENV"
 cargo run --release --example accuracy -- "$ENV" >> results/results.csv
 scripts/firmware_sizes.sh "$ENV" >> results/results.csv
-python3 scripts/make_table.py results/results.csv kalman-rs
+python3 scripts/make_table.py results/results.csv typed-kalman

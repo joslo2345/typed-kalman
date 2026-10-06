@@ -1,4 +1,4 @@
-# kalman-rs
+# typed-kalman
 
 Type-safe Kalman filters for Rust, from desktops to microcontrollers: a linear KF, EKF, UKF,
 square-root KF and UKF, and an RTS smoother, with NIS/NEES consistency diagnostics and optional
@@ -19,12 +19,12 @@ automatic Jacobians.
 
 ```toml
 [dependencies]
-kalman-rs = "0.1"
+typed-kalman = "0.1"
 nalgebra = "0.35"
 ```
 
 ```rust
-use kalman_rs::LinearKf;
+use typed_kalman::LinearKf;
 use nalgebra::{Matrix1, Matrix1x2, Matrix2, Vector1, Vector2};
 
 // State [position, velocity]; we measure position.
@@ -44,7 +44,7 @@ for z in [0.21, 0.38, 0.62, 0.79] {
 println!("position {:.2}, velocity {:.2}", kf.state()[0], kf.state()[1]);
 ```
 
-The [crate documentation](https://docs.rs/kalman-rs) explains which filter to choose. The
+The [crate documentation](https://docs.rs/typed-kalman) explains which filter to choose. The
 examples show complete programs:
 
 - `cargo run --example constant_velocity`: track a 2D target, check consistency with the NIS,
@@ -59,12 +59,12 @@ filter:
 
 ```toml
 [dependencies]
-kalman-rs = { version = "0.1", default-features = false }
+typed-kalman = { version = "0.1", default-features = false }
 nalgebra = { version = "0.35", default-features = false, features = ["libm"] }
 ```
 
 ```rust
-use kalman_rs::LinearKf;
+use typed_kalman::LinearKf;
 use nalgebra::{Matrix1, Matrix1x2, Matrix2, Vector1};
 
 fn step(kf: &mut LinearKf<2, f32>, position: f32) -> Option<f32> {
@@ -102,7 +102,7 @@ The minimum supported Rust version is 1.89, set by `nalgebra` 0.35.
 strong one: it also has compile-time dimensions, `no_std` support, any `nalgebra` scalar, and
 an RTS smoother. The test suite checks that the two agree to within 1e-9 on the same problems.
 
-| | kalman-rs | adskalman 0.18 |
+| | typed-kalman | adskalman 0.18 |
 |---|---|---|
 | Linear KF, RTS smoother | ✓ | ✓ |
 | Covariance update | Joseph form | Joseph form, or two faster optimal-gain forms |
@@ -120,7 +120,7 @@ two correct implementations must agree.
 
 Every number comes from `scripts/run_comparison.sh`, which runs each library on the same frozen
 scenarios (`tests/vectors/`, S1–S5) and regenerates this table from `results/results.csv`.
-"Ours vs best other" compares `kalman-rs` with the best other library on each row, above 1.00x
+"Ours vs best other" compares `typed-kalman` with the best other library on each row, above 1.00x
 meaning ours is better. Numbers are only published from a dedicated benchmark machine.
 
 <!-- BENCH:START -->

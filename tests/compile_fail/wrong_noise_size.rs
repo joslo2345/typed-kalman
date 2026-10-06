@@ -1,4 +1,4 @@
-use kalman_rs::linear::LinearKf;
+use typed_kalman::linear::LinearKf;
 use nalgebra::{Matrix2x4, Matrix3, Vector2};
 
 fn main() {

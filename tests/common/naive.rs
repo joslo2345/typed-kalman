@@ -3,8 +3,8 @@
 //! It uses the short covariance update `P = (I - K H) P`, inverts `S` explicitly, and never
 //! symmetrizes, as many hand-written filters do.
 
-use kalman_rs::Float;
 use nalgebra::{SMatrix, SVector};
+use typed_kalman::Float;
 
 /// An unstabilized linear Kalman filter.
 pub struct NaiveKf<const N: usize, T: Float> {

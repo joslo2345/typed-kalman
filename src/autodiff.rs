@@ -6,8 +6,8 @@
 //! Jacobians exact to floating-point precision. The wrapped model also works with the UKFs.
 //!
 //! ```
-//! use kalman_rs::autodiff::{AutoDiff, AutoMeasurement, Real};
-//! use kalman_rs::MeasurementJacobian;
+//! use typed_kalman::autodiff::{AutoDiff, AutoMeasurement, Real};
+//! use typed_kalman::MeasurementJacobian;
 //! use nalgebra::{SVector, Vector2, Vector4};
 //!
 //! /// Range and bearing to a target at (x, y), with state [x, y, vx, vy].

@@ -10,8 +10,8 @@ pub mod rng;
 pub mod scenarios;
 pub mod vectors;
 
-use kalman_rs::linear::LinearKf;
 use scenarios::Scenario;
+use typed_kalman::linear::LinearKf;
 
 /// Builds a filter initialized from a scenario's prior.
 pub trait FromScenario<const N: usize, const M: usize> {

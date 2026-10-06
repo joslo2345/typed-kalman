@@ -137,7 +137,7 @@ jobs:
             echo "Accuracy, stability, allocation and firmware-size numbers from CI. Timings come from"
             echo "the dedicated benchmark machine, not from shared runners."
             echo
-            python3 scripts/make_table.py results/results.csv kalman-rs
+            python3 scripts/make_table.py results/results.csv typed-kalman
             echo
             echo '## Test report lines'
             echo

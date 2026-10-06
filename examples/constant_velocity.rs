@@ -5,10 +5,10 @@
 //!
 //! Run with `cargo run --example constant_velocity`.
 
-use kalman_rs::diagnostics::chi_squared_bounds;
-use kalman_rs::smoother::{smooth, Estimate, RtsStep};
-use kalman_rs::LinearKf;
 use nalgebra::{Matrix2, Matrix2x4, Matrix4, Vector2, Vector4};
+use typed_kalman::diagnostics::chi_squared_bounds;
+use typed_kalman::smoother::{smooth, Estimate, RtsStep};
+use typed_kalman::LinearKf;
 
 const STEPS: usize = 500;
 
@@ -30,7 +30,7 @@ impl Noise {
     }
 }
 
-fn main() -> Result<(), kalman_rs::KalmanError> {
+fn main() -> Result<(), typed_kalman::KalmanError> {
     // State [x, y, vx, vy]; we measure [x, y].
     let dt = 0.1;
     #[rustfmt::skip]

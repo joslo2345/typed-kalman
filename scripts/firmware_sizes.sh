@@ -21,7 +21,7 @@ section() { # <elf> <section name>: prints the section's size, or 0 if it's abse
   "$SIZE" -A "$1" | awk -v name="$2" '$1 == name { print $2; found = 1 } END { if (!found) print 0 }'
 }
 
-for pair in "fw_kalman_rs:kalman-rs:$COMMIT" "fw_adskalman:adskalman-joseph:$ADSKALMAN_VERSION"; do
+for pair in "fw_typed_kalman:typed-kalman:$COMMIT" "fw_adskalman:adskalman-joseph:$ADSKALMAN_VERSION"; do
   IFS=: read -r bin library version <<< "$pair"
   elf="target/thumbv7em-none-eabihf/release/$bin"
   vectors=$(section "$elf" .vector_table)

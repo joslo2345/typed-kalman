@@ -1,4 +1,4 @@
-use kalman_rs::{Ekf, ProcessJacobian, ProcessModel};
+use typed_kalman::{Ekf, ProcessJacobian, ProcessModel};
 use nalgebra::{Matrix3, Matrix4, Vector3, Vector4};
 
 /// A process model for a 3-dimensional state.

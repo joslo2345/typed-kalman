@@ -6,10 +6,10 @@
 mod common;
 
 use common::scenarios;
-use kalman_rs::diagnostics::{chi_squared_bounds, nees};
-use kalman_rs::{Ekf, LinearKf, MeasurementJacobian, MeasurementModel, ProcessJacobian};
-use kalman_rs::{KalmanError, ProcessModel, SqrtKf, SqrtUkf, Ukf};
 use nalgebra::{Cholesky, Matrix2, Matrix2x4, Matrix4, Vector2, Vector4};
+use typed_kalman::diagnostics::{chi_squared_bounds, nees};
+use typed_kalman::{Ekf, LinearKf, MeasurementJacobian, MeasurementModel, ProcessJacobian};
+use typed_kalman::{KalmanError, ProcessModel, SqrtKf, SqrtUkf, Ukf};
 
 const RUNS: usize = 500;
 const STEPS: usize = 50;

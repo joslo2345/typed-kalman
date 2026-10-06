@@ -13,7 +13,7 @@
 //! measurements:
 //!
 //! ```
-//! use kalman_rs::LinearKf;
+//! use typed_kalman::LinearKf;
 //! use nalgebra::{Matrix1, Matrix1x2, Matrix2, Vector1, Vector2};
 //!
 //! let dt = 0.1;
@@ -30,7 +30,7 @@
 //!     assert!(nis.is_finite());
 //! }
 //! assert!((kf.state()[1] - 2.0).abs() < 0.1); // the velocity has been estimated
-//! # Ok::<(), kalman_rs::KalmanError>(())
+//! # Ok::<(), typed_kalman::KalmanError>(())
 //! ```
 //!
 //! # Choosing a filter
@@ -63,7 +63,7 @@
 //! Without `std`, the filters work unchanged, in single precision:
 //!
 //! ```
-//! use kalman_rs::LinearKf;
+//! use typed_kalman::LinearKf;
 //! use nalgebra::{Matrix1, Matrix1x2, Matrix2, Vector1, Vector2};
 //!
 //! fn step(kf: &mut LinearKf<2, f32>, position: f32) -> Option<f32> {

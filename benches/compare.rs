@@ -13,8 +13,8 @@ use common::baseline::{Models, METHODS};
 use common::scenarios::Scenario;
 use common::vectors::load;
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
-use kalman_rs::{Float, LinearKf, SqrtKf};
 use nalgebra::{Cholesky, Const, DimMin, SMatrix, SVector};
+use typed_kalman::{Float, LinearKf, SqrtKf};
 
 /// A scenario's inputs converted to precision `T` up front.
 struct Inputs<const N: usize, const M: usize, T: Float> {
@@ -78,8 +78,10 @@ fn bench_linear<const N: usize, const M: usize, T: Float>(
 
     let mut group = c.benchmark_group(format!("{id}_KF_{precision}"));
     group.throughput(Throughput::Elements(sc.zs.len() as u64));
-    group.bench_function("kalman-rs", |b| b.iter(|| run_linear(black_box(&inputs))));
-    group.bench_function("kalman-rs-sqrt", |b| {
+    group.bench_function("typed-kalman", |b| {
+        b.iter(|| run_linear(black_box(&inputs)))
+    });
+    group.bench_function("typed-kalman-sqrt", |b| {
         b.iter(|| run_sqrt(black_box(&inputs)))
     });
     for (name, method) in METHODS {

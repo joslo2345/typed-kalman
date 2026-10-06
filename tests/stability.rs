@@ -5,11 +5,11 @@ mod common;
 use common::naive::NaiveKf;
 use common::rng::Rng;
 use common::{scenarios, FromScenario};
-use kalman_rs::linear::LinearKf;
-use kalman_rs::Float;
-use kalman_rs::SqrtKf;
 use nalgebra::{Cholesky, SMatrix};
 use proptest::prelude::*;
+use typed_kalman::linear::LinearKf;
+use typed_kalman::Float;
+use typed_kalman::SqrtKf;
 
 /// Returns whether `p` is finite, symmetric to within `tol` relative to its largest entry, and
 /// positive-definite.
@@ -123,7 +123,7 @@ fn f32_million_steps() {
         Some(step) => println!("report: S4 naive steps_to_failure = {step}"),
         None => println!("report: S4 naive stayed stable for {STEPS} steps"),
     }
-    println!("report: S4 kalman-rs steps_to_failure > {STEPS}");
+    println!("report: S4 typed-kalman steps_to_failure > {STEPS}");
     assert!(
         naive_failed_at.is_some(),
         "S4 no longer breaks the naive filter, so it doesn't test stability"

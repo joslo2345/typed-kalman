@@ -6,9 +6,9 @@
 //!
 //! Run with `cargo run --example imu_attitude --features autodiff`.
 
-use kalman_rs::autodiff::{AutoDiff, AutoMeasurement, AutoProcess, Real};
-use kalman_rs::{Ekf, Ukf};
 use nalgebra::{Matrix3, Matrix4, SVector, Vector3, Vector4};
+use typed_kalman::autodiff::{AutoDiff, AutoMeasurement, AutoProcess, Real};
+use typed_kalman::{Ekf, Ukf};
 
 const G: f64 = 9.81;
 const DT: f64 = 0.01;
@@ -62,7 +62,7 @@ impl Noise {
     }
 }
 
-fn main() -> Result<(), kalman_rs::KalmanError> {
+fn main() -> Result<(), typed_kalman::KalmanError> {
     let true_bias = [0.02, -0.015]; // rad/s
     let (gyro_sd, accel_sd) = (0.01, 0.2);
 

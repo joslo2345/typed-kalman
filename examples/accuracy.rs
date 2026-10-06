@@ -16,11 +16,11 @@ use common::baseline::{self, Models, METHODS};
 use common::naive::NaiveKf;
 use common::scenarios::{range_bearing, Scenario};
 use common::vectors::load;
-use kalman_rs::diagnostics::nees;
-use kalman_rs::{Ekf, LinearKf, MeasurementJacobian, MeasurementModel, ProcessJacobian};
-use kalman_rs::{ProcessModel, SqrtKf, SqrtUkf, Ukf};
 use nalgebra::{Cholesky, Const, DimMin, Matrix2, Matrix2x4, Matrix4, SMatrix, SVector};
 use nalgebra::{Vector2, Vector4};
+use typed_kalman::diagnostics::nees;
+use typed_kalman::{Ekf, LinearKf, MeasurementJacobian, MeasurementModel, ProcessJacobian};
+use typed_kalman::{ProcessModel, SqrtKf, SqrtUkf, Ukf};
 
 /// Counts heap allocations, for the `heap_allocations` metric.
 struct Counting;
@@ -160,7 +160,7 @@ where
         errors.add(truth, kf.state(), kf.covariance());
         ours.push(*kf.state());
     }
-    errors.report(r, "kalman-rs", id, "KF");
+    errors.report(r, "typed-kalman", id, "KF");
 
     let mut errors = Errors::default();
     let mut skf = SqrtKf::new(sc.x0, sc.p0).unwrap();
@@ -169,7 +169,7 @@ where
         skf.update(&sc.h, z, &r_sqrt).unwrap();
         errors.add(truth, skf.state(), &skf.covariance());
     }
-    errors.report(r, "kalman-rs-sqrt", id, "KF");
+    errors.report(r, "typed-kalman-sqrt", id, "KF");
 
     let models = Models::<N, M>::new(sc);
     for (name, method) in METHODS {
@@ -196,7 +196,7 @@ where
         }
     });
     r.row(
-        "kalman-rs",
+        "typed-kalman",
         id,
         "KF",
         "float64",
@@ -212,7 +212,7 @@ where
         }
     });
     r.row(
-        "kalman-rs-sqrt",
+        "typed-kalman-sqrt",
         id,
         "KF",
         "float64",
@@ -307,10 +307,10 @@ fn s3(r: &Report) {
         })
         .unwrap();
     }
-    ekf_err.report(r, "kalman-rs", "S3", "EKF");
+    ekf_err.report(r, "typed-kalman", "S3", "EKF");
     ads_err.report(r, "adskalman-joseph", "S3", "EKF");
-    ukf_err.report(r, "kalman-rs", "S3", "UKF");
-    sr_err.report(r, "kalman-rs-sqrt", "S3", "UKF");
+    ukf_err.report(r, "typed-kalman", "S3", "UKF");
+    sr_err.report(r, "typed-kalman-sqrt", "S3", "UKF");
 }
 
 /// Whether `p` is finite, symmetric to within 1e-4 of its largest entry, and positive-definite.
@@ -354,7 +354,7 @@ fn s4(r: &Report) {
 
     let mut kf = LinearKf::new(x0, p0);
     row(
-        "kalman-rs",
+        "typed-kalman",
         steps_to_failure(steps, |k| {
             kf.predict(&f, &q);
             kf.update(&h, &zs[k], &rr).is_ok() && is_spd(kf.covariance())
@@ -364,7 +364,7 @@ fn s4(r: &Report) {
     let (q_sqrt, r_sqrt) = (sqrt(&sc.q).cast::<f32>(), sqrt(&sc.r).cast::<f32>());
     let mut skf = SqrtKf::new(x0, p0).unwrap();
     row(
-        "kalman-rs-sqrt",
+        "typed-kalman-sqrt",
         steps_to_failure(steps, |k| {
             let ok = skf
                 .predict(&f, &q_sqrt)

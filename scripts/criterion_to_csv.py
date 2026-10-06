@@ -34,7 +34,7 @@ with open("results/results.csv", "a", newline="") as f:
         model = json.load(open(f"tests/vectors/{scenario}/model.json"))
         steps = model["runs"] * model["steps"]
         ns_per_step = json.load(open(path))["median"]["point_estimate"] / steps
-        version = env[0] if library.startswith("kalman-rs") else adskalman_version
+        version = env[0] if library.startswith("typed-kalman") else adskalman_version
         out.writerow([library, version, scenario, filt, precision,
                       "time_per_step", f"{ns_per_step:.2f}", "ns", *env])
         rows += 1

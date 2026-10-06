@@ -14,7 +14,7 @@ publish = false
 [workspace]
 
 [dependencies]
-kalman-rs = { path = "../..", default-features = false }
+typed-kalman = { path = "../..", default-features = false }
 adskalman = { version = "0.18", default-features = false }
 nalgebra = { version = "0.35", default-features = false, features = ["libm"] }
 cortex-m = "0.7"

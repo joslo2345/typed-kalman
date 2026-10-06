@@ -3,9 +3,9 @@
 mod common;
 
 use common::scenarios;
-use kalman_rs::{Ekf, KalmanError, LinearKf, MeasurementJacobian, MeasurementModel};
-use kalman_rs::{SqrtKf, SqrtUkf, Ukf};
 use nalgebra::{Matrix2, Matrix2x4, Matrix4, Vector2, Vector4};
+use typed_kalman::{Ekf, KalmanError, LinearKf, MeasurementJacobian, MeasurementModel};
+use typed_kalman::{SqrtKf, SqrtUkf, Ukf};
 
 /// Measures position, or NaN when `broken` is set, as a model failing at some states might.
 struct Position {

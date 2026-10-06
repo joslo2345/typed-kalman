@@ -1,12 +1,12 @@
-//! S2 with kalman-rs's LinearKf (Joseph form), f32.
+//! S2 with typed-kalman's LinearKf (Joseph form), f32.
 #![no_std]
 #![no_main]
 
 use cortex_m_rt::entry;
 use firmware::{matrix, measurement, s2, time_and_halt};
-use kalman_rs::LinearKf;
 use nalgebra::SVector;
 use panic_halt as _;
+use typed_kalman::LinearKf;
 
 #[entry]
 fn main() -> ! {

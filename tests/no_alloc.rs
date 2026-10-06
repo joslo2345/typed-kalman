@@ -8,10 +8,10 @@ mod common;
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use kalman_rs::smoother::{smooth, Estimate, RtsStep};
-use kalman_rs::{Ekf, LinearKf, MeasurementJacobian, MeasurementModel, ProcessJacobian};
-use kalman_rs::{ProcessModel, SqrtKf, SqrtUkf, Ukf};
 use nalgebra::{Cholesky, Matrix2, Matrix2x4, Matrix4, Vector2, Vector4};
+use typed_kalman::smoother::{smooth, Estimate, RtsStep};
+use typed_kalman::{Ekf, LinearKf, MeasurementJacobian, MeasurementModel, ProcessJacobian};
+use typed_kalman::{ProcessModel, SqrtKf, SqrtUkf, Ukf};
 
 struct Counting;
 static ALLOCS: AtomicUsize = AtomicUsize::new(0);

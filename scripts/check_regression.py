@@ -5,7 +5,7 @@ Usage: python scripts/check_regression.py 0.10
 
 Run after `cargo bench --bench compare -- --baseline <name>`, which writes each benchmark's
 relative change to target/criterion/<group>/<library>/change/estimates.json. Only our own
-libraries (kalman-rs, kalman-rs-*) in benches/compare.rs groups are checked; the baselines'
+libraries (typed-kalman, typed-kalman-*) in benches/compare.rs groups are checked; the baselines'
 timings are context. Clear target/criterion before the baseline run: change files from earlier
 runs stay on disk and would be read as if they were new.
 """
@@ -21,7 +21,7 @@ regressions = []
 checked = 0
 for path in sorted(Path("target/criterion").glob("*/*/change/estimates.json")):
     group, library = path.parts[-4], path.parts[-3]
-    if not GROUP.match(group) or not library.startswith("kalman-rs"):
+    if not GROUP.match(group) or not library.startswith("typed-kalman"):
         continue
     mean = json.load(open(path))["mean"]
     change, lower = mean["point_estimate"], mean["confidence_interval"]["lower_bound"]

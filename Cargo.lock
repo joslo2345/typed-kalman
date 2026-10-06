@@ -415,20 +415,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "kalman-rs"
-version = "0.1.0"
-dependencies = [
- "adskalman",
- "approx",
- "criterion",
- "nalgebra",
- "proptest",
- "serde",
- "serde_json",
- "trybuild",
-]
-
-[[package]]
 name = "libc"
 version = "0.2.190"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -986,6 +972,20 @@ dependencies = [
  "target-tuple",
  "termcolor",
  "toml",
+]
+
+[[package]]
+name = "typed-kalman"
+version = "0.1.0"
+dependencies = [
+ "adskalman",
+ "approx",
+ "criterion",
+ "nalgebra",
+ "proptest",
+ "serde",
+ "serde_json",
+ "trybuild",
 ]
 
 [[package]]
