@@ -21,7 +21,7 @@ All notable changes to this crate are documented here. The format follows
 - `diagnostics`: `nees`, `chi_squared_quantile` and `chi_squared_bounds` for consistency
   checks; every `update` returns the NIS.
 - `autodiff` feature: exact Jacobians from dual numbers, through `AutoProcess`,
-  `AutoMeasurement` and the `AutoDiff` wrapper.
+  `AutoMeasurement` and the `AutoDiff` wrapper, in `f64` or `f32`.
 - `MeasurementModel::residual` and `wrap_angle`: wrapped measurements such as bearings work
   across ±π. The EKF uses the residual for its innovation; the UKFs also use it to average and
   spread their sigma points.

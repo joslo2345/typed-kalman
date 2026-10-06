@@ -24,8 +24,10 @@
 //! assert!((h[(0, 0)] - 0.6).abs() < 1e-12); // ∂range/∂x = x / range
 //! ```
 //!
-//! Only the state is differentiated. Model parameters and `dt` stay `f64`, and mix with `T`
-//! through `T + f64`, `T * f64` and so on (write the `f64` on the right).
+//! Only the state is differentiated. Model parameters and `dt` are plain numbers of the filter's
+//! scalar type (`f64` by default), and mix with `T` through `T + f64`, `T * f64` and so on
+//! (write the constant on the right). For an `f32` filter, implement `AutoProcess<N, f32>` /
+//! `AutoMeasurement<N, M, f32>` and write constants as `f32`.
 
 use core::fmt::Debug;
 use core::ops::{Add, Div, Mul, Neg, Sub};
@@ -33,10 +35,12 @@ use core::ops::{Add, Div, Mul, Neg, Sub};
 use nalgebra::{ComplexField, RealField, SMatrix, SVector};
 
 use crate::model::{MeasurementJacobian, MeasurementModel, ProcessJacobian, ProcessModel};
+use crate::scalar::{lit, Float};
 
-/// A real scalar that models are written over: `f64`, or a [`Dual`] number when
-/// differentiating.
-pub trait Real:
+/// A real scalar that models are written over: the filter's scalar `S` (`f64` or `f32`), or a
+/// [`Dual`] number when differentiating. Constants of type `S` mix in on the right
+/// (`T * S`, `T + S`, ...).
+pub trait Real<S: Float = f64>:
     nalgebra::Scalar
     + Copy
     + Debug
@@ -45,15 +49,15 @@ pub trait Real:
     + Mul<Output = Self>
     + Div<Output = Self>
     + Neg<Output = Self>
-    + Add<f64, Output = Self>
-    + Sub<f64, Output = Self>
-    + Mul<f64, Output = Self>
-    + Div<f64, Output = Self>
+    + Add<S, Output = Self>
+    + Sub<S, Output = Self>
+    + Mul<S, Output = Self>
+    + Div<S, Output = Self>
 {
     /// Converts a constant, which has zero derivative.
-    fn constant(value: f64) -> Self;
+    fn constant(value: S) -> Self;
     /// Returns the value, discarding any derivative.
-    fn value(self) -> f64;
+    fn value(self) -> S;
     /// Sine.
     fn sin(self) -> Self;
     /// Cosine.
@@ -80,71 +84,77 @@ pub trait Real:
     fn abs(self) -> Self;
 }
 
-// Through nalgebra's traits so the math uses libm when `std` is off.
-impl Real for f64 {
-    fn constant(value: f64) -> Self {
-        value
-    }
-    fn value(self) -> f64 {
-        self
-    }
-    fn sin(self) -> Self {
-        ComplexField::sin(self)
-    }
-    fn cos(self) -> Self {
-        ComplexField::cos(self)
-    }
-    fn tan(self) -> Self {
-        ComplexField::tan(self)
-    }
-    fn asin(self) -> Self {
-        ComplexField::asin(self)
-    }
-    fn acos(self) -> Self {
-        ComplexField::acos(self)
-    }
-    fn atan(self) -> Self {
-        ComplexField::atan(self)
-    }
-    fn atan2(self, x: Self) -> Self {
-        RealField::atan2(self, x)
-    }
-    fn sqrt(self) -> Self {
-        ComplexField::sqrt(self)
-    }
-    fn exp(self) -> Self {
-        ComplexField::exp(self)
-    }
-    fn ln(self) -> Self {
-        ComplexField::ln(self)
-    }
-    fn powi(self, n: i32) -> Self {
-        ComplexField::powi(self, n)
-    }
-    fn abs(self) -> Self {
-        ComplexField::abs(self)
-    }
+// The plain scalars. Math goes through nalgebra's traits so it uses libm when `std` is off.
+macro_rules! impl_real_for_scalar {
+    ($($t:ty),*) => {$(
+        impl Real<$t> for $t {
+            fn constant(value: $t) -> Self {
+                value
+            }
+            fn value(self) -> $t {
+                self
+            }
+            fn sin(self) -> Self {
+                ComplexField::sin(self)
+            }
+            fn cos(self) -> Self {
+                ComplexField::cos(self)
+            }
+            fn tan(self) -> Self {
+                ComplexField::tan(self)
+            }
+            fn asin(self) -> Self {
+                ComplexField::asin(self)
+            }
+            fn acos(self) -> Self {
+                ComplexField::acos(self)
+            }
+            fn atan(self) -> Self {
+                ComplexField::atan(self)
+            }
+            fn atan2(self, x: Self) -> Self {
+                RealField::atan2(self, x)
+            }
+            fn sqrt(self) -> Self {
+                ComplexField::sqrt(self)
+            }
+            fn exp(self) -> Self {
+                ComplexField::exp(self)
+            }
+            fn ln(self) -> Self {
+                ComplexField::ln(self)
+            }
+            fn powi(self, n: i32) -> Self {
+                ComplexField::powi(self, n)
+            }
+            fn abs(self) -> Self {
+                ComplexField::abs(self)
+            }
+        }
+    )*};
 }
 
-/// A dual number: a value plus its gradient with respect to `N` variables.
+impl_real_for_scalar!(f32, f64);
+
+/// A dual number: a value of type `S` plus its gradient with respect to `N` variables.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Dual<const N: usize> {
+pub struct Dual<const N: usize, S: Float = f64> {
     /// The value.
-    pub re: f64,
+    pub re: S,
     /// The gradient of the value with respect to each variable.
-    pub eps: SVector<f64, N>,
+    pub eps: SVector<S, N>,
 }
 
-impl<const N: usize> Dual<N> {
+impl<const N: usize, S: Float> Dual<N, S> {
     /// Returns variable `i` with value `value`, whose gradient is the `i`-th unit vector.
-    pub fn variable(value: f64, i: usize) -> Self {
+    pub fn variable(value: S, i: usize) -> Self {
         let mut eps = SVector::zeros();
-        eps[i] = 1.0;
+        eps[i] = S::one();
         Self { re: value, eps }
     }
 
     /// Applies a function with value `f` and derivative `df` at `self.re` (the chain rule).
-    fn chain(self, f: f64, df: f64) -> Self {
+    fn chain(self, f: S, df: S) -> Self {
         Self {
             re: f,
             eps: self.eps * df,
@@ -152,7 +162,7 @@ impl<const N: usize> Dual<N> {
     }
 }
 
-impl<const N: usize> Add for Dual<N> {
+impl<const N: usize, S: Float> Add for Dual<N, S> {
     type Output = Self;
     fn add(self, rhs: Self) -> Self {
         Self {
@@ -162,7 +172,7 @@ impl<const N: usize> Add for Dual<N> {
     }
 }
 
-impl<const N: usize> Sub for Dual<N> {
+impl<const N: usize, S: Float> Sub for Dual<N, S> {
     type Output = Self;
     fn sub(self, rhs: Self) -> Self {
         Self {
@@ -172,7 +182,7 @@ impl<const N: usize> Sub for Dual<N> {
     }
 }
 
-impl<const N: usize> Mul for Dual<N> {
+impl<const N: usize, S: Float> Mul for Dual<N, S> {
     type Output = Self;
     fn mul(self, rhs: Self) -> Self {
         Self {
@@ -182,7 +192,7 @@ impl<const N: usize> Mul for Dual<N> {
     }
 }
 
-impl<const N: usize> Div for Dual<N> {
+impl<const N: usize, S: Float> Div for Dual<N, S> {
     type Output = Self;
     fn div(self, rhs: Self) -> Self {
         Self {
@@ -192,7 +202,7 @@ impl<const N: usize> Div for Dual<N> {
     }
 }
 
-impl<const N: usize> Neg for Dual<N> {
+impl<const N: usize, S: Float> Neg for Dual<N, S> {
     type Output = Self;
     fn neg(self) -> Self {
         Self {
@@ -202,9 +212,9 @@ impl<const N: usize> Neg for Dual<N> {
     }
 }
 
-impl<const N: usize> Add<f64> for Dual<N> {
+impl<const N: usize, S: Float> Add<S> for Dual<N, S> {
     type Output = Self;
-    fn add(self, rhs: f64) -> Self {
+    fn add(self, rhs: S) -> Self {
         Self {
             re: self.re + rhs,
             eps: self.eps,
@@ -212,9 +222,9 @@ impl<const N: usize> Add<f64> for Dual<N> {
     }
 }
 
-impl<const N: usize> Sub<f64> for Dual<N> {
+impl<const N: usize, S: Float> Sub<S> for Dual<N, S> {
     type Output = Self;
-    fn sub(self, rhs: f64) -> Self {
+    fn sub(self, rhs: S) -> Self {
         Self {
             re: self.re - rhs,
             eps: self.eps,
@@ -222,9 +232,9 @@ impl<const N: usize> Sub<f64> for Dual<N> {
     }
 }
 
-impl<const N: usize> Mul<f64> for Dual<N> {
+impl<const N: usize, S: Float> Mul<S> for Dual<N, S> {
     type Output = Self;
-    fn mul(self, rhs: f64) -> Self {
+    fn mul(self, rhs: S) -> Self {
         Self {
             re: self.re * rhs,
             eps: self.eps * rhs,
@@ -232,9 +242,9 @@ impl<const N: usize> Mul<f64> for Dual<N> {
     }
 }
 
-impl<const N: usize> Div<f64> for Dual<N> {
+impl<const N: usize, S: Float> Div<S> for Dual<N, S> {
     type Output = Self;
-    fn div(self, rhs: f64) -> Self {
+    fn div(self, rhs: S) -> Self {
         Self {
             re: self.re / rhs,
             eps: self.eps / rhs,
@@ -242,68 +252,64 @@ impl<const N: usize> Div<f64> for Dual<N> {
     }
 }
 
-impl<const N: usize> Real for Dual<N> {
-    fn constant(value: f64) -> Self {
+// Derivatives through nalgebra's traits, so they use libm when `std` is off.
+impl<const N: usize, S: Float> Real<S> for Dual<N, S> {
+    fn constant(value: S) -> Self {
         Self {
             re: value,
             eps: SVector::zeros(),
         }
     }
-    fn value(self) -> f64 {
+    fn value(self) -> S {
         self.re
     }
     fn sin(self) -> Self {
-        self.chain(Real::sin(self.re), Real::cos(self.re))
+        self.chain(ComplexField::sin(self.re), ComplexField::cos(self.re))
     }
     fn cos(self) -> Self {
-        self.chain(Real::cos(self.re), -Real::sin(self.re))
+        self.chain(ComplexField::cos(self.re), -ComplexField::sin(self.re))
     }
     fn tan(self) -> Self {
-        let t = Real::tan(self.re);
-        self.chain(t, 1.0 + t * t)
+        let t = ComplexField::tan(self.re);
+        self.chain(t, S::one() + t * t)
     }
     fn asin(self) -> Self {
-        self.chain(
-            Real::asin(self.re),
-            1.0 / Real::sqrt(1.0 - self.re * self.re),
-        )
+        let d = S::one() / ComplexField::sqrt(S::one() - self.re * self.re);
+        self.chain(ComplexField::asin(self.re), d)
     }
     fn acos(self) -> Self {
-        self.chain(
-            Real::acos(self.re),
-            -1.0 / Real::sqrt(1.0 - self.re * self.re),
-        )
+        let d = -S::one() / ComplexField::sqrt(S::one() - self.re * self.re);
+        self.chain(ComplexField::acos(self.re), d)
     }
     fn atan(self) -> Self {
-        self.chain(Real::atan(self.re), 1.0 / (1.0 + self.re * self.re))
+        let d = S::one() / (S::one() + self.re * self.re);
+        self.chain(ComplexField::atan(self.re), d)
     }
     fn atan2(self, x: Self) -> Self {
         // d atan2(y, x) = (x dy - y dx) / (x² + y²)
         let r2 = x.re * x.re + self.re * self.re;
         Self {
-            re: Real::atan2(self.re, x.re),
+            re: RealField::atan2(self.re, x.re),
             eps: (self.eps * x.re - x.eps * self.re) / r2,
         }
     }
     fn sqrt(self) -> Self {
-        let s = Real::sqrt(self.re);
-        self.chain(s, 0.5 / s)
+        let s = ComplexField::sqrt(self.re);
+        self.chain(s, lit::<S>(0.5) / s)
     }
     fn exp(self) -> Self {
-        let e = Real::exp(self.re);
+        let e = ComplexField::exp(self.re);
         self.chain(e, e)
     }
     fn ln(self) -> Self {
-        self.chain(Real::ln(self.re), 1.0 / self.re)
+        self.chain(ComplexField::ln(self.re), S::one() / self.re)
     }
     fn powi(self, n: i32) -> Self {
-        self.chain(
-            Real::powi(self.re, n),
-            n as f64 * Real::powi(self.re, n - 1),
-        )
+        let d = lit::<S>(f64::from(n)) * ComplexField::powi(self.re, n - 1);
+        self.chain(ComplexField::powi(self.re, n), d)
     }
     fn abs(self) -> Self {
-        if self.re < 0.0 {
+        if self.re < S::zero() {
             -self
         } else {
             self
@@ -312,20 +318,23 @@ impl<const N: usize> Real for Dual<N> {
 }
 
 /// A process model written generically over [`Real`], so [`AutoDiff`] can differentiate it.
-pub trait AutoProcess<const N: usize> {
+///
+/// `S` is the filter's scalar: implement `AutoProcess<N>` for `f64` filters, or
+/// `AutoProcess<N, f32>` for `f32` ones, with constants of that type.
+pub trait AutoProcess<const N: usize, S: Float = f64> {
     /// Propagates the state `x` forward by `dt`.
-    fn predict<T: Real>(&self, x: &SVector<T, N>, dt: f64) -> SVector<T, N>;
+    fn predict<T: Real<S>>(&self, x: &SVector<T, N>, dt: S) -> SVector<T, N>;
 }
 
 /// A measurement model written generically over [`Real`], so [`AutoDiff`] can differentiate
-/// it.
-pub trait AutoMeasurement<const N: usize, const M: usize> {
+/// it. `S` is the filter's scalar, as for [`AutoProcess`].
+pub trait AutoMeasurement<const N: usize, const M: usize, S: Float = f64> {
     /// Returns the measurement expected for the state `x`.
-    fn measure<T: Real>(&self, x: &SVector<T, N>) -> SVector<T, M>;
+    fn measure<T: Real<S>>(&self, x: &SVector<T, N>) -> SVector<T, M>;
 
     /// Returns the difference `a - b` between two measurements; see
     /// [`MeasurementModel::residual`]. Override it for wrapped components such as bearings.
-    fn residual(&self, a: &SVector<f64, M>, b: &SVector<f64, M>) -> SVector<f64, M> {
+    fn residual(&self, a: &SVector<S, M>, b: &SVector<S, M>) -> SVector<S, M> {
         a - b
     }
 }
@@ -336,43 +345,49 @@ pub trait AutoMeasurement<const N: usize, const M: usize> {
 pub struct AutoDiff<Model>(pub Model);
 
 /// Returns `x` as dual numbers, with `x[i]` seeded as variable `i`.
-fn seed<const N: usize>(x: &SVector<f64, N>) -> SVector<Dual<N>, N> {
+fn seed<const N: usize, S: Float>(x: &SVector<S, N>) -> SVector<Dual<N, S>, N> {
     SVector::from_fn(|i, _| Dual::variable(x[i], i))
 }
 
 /// Stacks the gradients of `y` as the rows of a Jacobian.
-fn jacobian_of<const N: usize, const M: usize>(y: &SVector<Dual<N>, M>) -> SMatrix<f64, M, N> {
+fn jacobian_of<const N: usize, const M: usize, S: Float>(
+    y: &SVector<Dual<N, S>, M>,
+) -> SMatrix<S, M, N> {
     SMatrix::from_fn(|i, j| y[i].eps[j])
 }
 
-impl<Model: AutoProcess<N>, const N: usize> ProcessModel<N> for AutoDiff<Model> {
-    fn predict(&self, x: &SVector<f64, N>, dt: f64) -> SVector<f64, N> {
+impl<Model: AutoProcess<N, S>, const N: usize, S: Float + Real<S>> ProcessModel<N, S>
+    for AutoDiff<Model>
+{
+    fn predict(&self, x: &SVector<S, N>, dt: S) -> SVector<S, N> {
         self.0.predict(x, dt)
     }
 }
 
-impl<Model: AutoProcess<N>, const N: usize> ProcessJacobian<N> for AutoDiff<Model> {
-    fn jacobian(&self, x: &SVector<f64, N>, dt: f64) -> SMatrix<f64, N, N> {
+impl<Model: AutoProcess<N, S>, const N: usize, S: Float + Real<S>> ProcessJacobian<N, S>
+    for AutoDiff<Model>
+{
+    fn jacobian(&self, x: &SVector<S, N>, dt: S) -> SMatrix<S, N, N> {
         jacobian_of(&self.0.predict(&seed(x), dt))
     }
 }
 
-impl<Model: AutoMeasurement<N, M>, const N: usize, const M: usize> MeasurementModel<N, M>
-    for AutoDiff<Model>
+impl<Model: AutoMeasurement<N, M, S>, const N: usize, const M: usize, S: Float + Real<S>>
+    MeasurementModel<N, M, S> for AutoDiff<Model>
 {
-    fn measure(&self, x: &SVector<f64, N>) -> SVector<f64, M> {
+    fn measure(&self, x: &SVector<S, N>) -> SVector<S, M> {
         self.0.measure(x)
     }
 
-    fn residual(&self, a: &SVector<f64, M>, b: &SVector<f64, M>) -> SVector<f64, M> {
+    fn residual(&self, a: &SVector<S, M>, b: &SVector<S, M>) -> SVector<S, M> {
         self.0.residual(a, b)
     }
 }
 
-impl<Model: AutoMeasurement<N, M>, const N: usize, const M: usize> MeasurementJacobian<N, M>
-    for AutoDiff<Model>
+impl<Model: AutoMeasurement<N, M, S>, const N: usize, const M: usize, S: Float + Real<S>>
+    MeasurementJacobian<N, M, S> for AutoDiff<Model>
 {
-    fn jacobian(&self, x: &SVector<f64, N>) -> SMatrix<f64, M, N> {
+    fn jacobian(&self, x: &SVector<S, N>) -> SMatrix<S, M, N> {
         jacobian_of(&self.0.measure(&seed(x)))
     }
 }
@@ -547,5 +562,77 @@ mod tests {
                 epsilon = 1e-9
             );
         }
+    }
+
+    /// Range and bearing, written once for any scalar: no constants, so it's generic over `S`.
+    struct AnyPrecisionRangeBearing;
+
+    impl<S: Float> AutoMeasurement<4, 2, S> for AnyPrecisionRangeBearing {
+        fn measure<T: Real<S>>(&self, s: &SVector<T, 4>) -> SVector<T, 2> {
+            let (x, y) = (s[0], s[1]);
+            Vector2::new(Real::sqrt(x * x + y * y), y.atan2(x))
+        }
+    }
+
+    /// The drag model in single precision, with `f32` constants mixed in as `T * f32`.
+    struct DragF32 {
+        k: f32,
+    }
+
+    impl AutoProcess<4, f32> for DragF32 {
+        fn predict<T: Real<f32>>(&self, s: &SVector<T, 4>, dt: f32) -> SVector<T, 4> {
+            let (vx, vy) = (s[2], s[3]);
+            let speed = Real::sqrt(vx * vx + vy * vy);
+            SVector::<T, 4>::new(
+                s[0] + vx * dt,
+                s[1] + vy * dt,
+                vx - speed * vx * (self.k * dt),
+                vy - speed * vy * (self.k * dt),
+            )
+        }
+    }
+
+    #[test]
+    fn f32_jacobians_match_f64() {
+        let s = Vector4::new(3.0, 4.0, 1.5, -0.5);
+        let single: nalgebra::Matrix2x4<f32> =
+            MeasurementJacobian::jacobian(&AutoDiff(AnyPrecisionRangeBearing), &s.cast::<f32>());
+        let double: Matrix2x4<f64> =
+            MeasurementJacobian::jacobian(&AutoDiff(AnyPrecisionRangeBearing), &s);
+        approx::assert_relative_eq!(single.cast::<f64>(), double, max_relative = 1e-6);
+
+        let single =
+            ProcessJacobian::jacobian(&AutoDiff(DragF32 { k: 0.1 }), &s.cast::<f32>(), 0.2);
+        let double = ProcessJacobian::jacobian(&Manual { k: 0.1 }, &s, 0.2);
+        approx::assert_relative_eq!(single.cast::<f64>(), double, max_relative = 1e-6);
+    }
+
+    #[test]
+    fn f32_ekf_with_autodiff_tracks_its_f64_twin() {
+        let (dt, k) = (0.1, 0.05);
+        let q = Matrix4::from_diagonal(&Vector4::new(1e-4, 1e-4, 1e-3, 1e-3));
+        let r = Matrix2::new(0.01, 0.0, 0.0, 1e-4);
+        let x0 = Vector4::new(10.0, 5.0, -1.0, 0.5);
+
+        let mut double = Ekf::new(x0, Matrix4::identity());
+        let mut single = Ekf::new(x0.cast::<f32>(), Matrix4::<f32>::identity());
+        let (process, measurement) = (
+            AutoDiff(DragF32 { k: k as f32 }),
+            AutoDiff(AnyPrecisionRangeBearing),
+        );
+        for step in 0..200 {
+            let t = step as f64 * dt;
+            let z = Vector2::new(11.0 + t.sin(), 0.46 + 0.01 * t.cos());
+
+            double.predict(&Manual { k }, &q, dt);
+            double.update(&Manual { k }, &z, &r).unwrap();
+            single.predict(&process, &q.cast(), dt as f32);
+            single.update(&measurement, &z.cast(), &r.cast()).unwrap();
+        }
+        approx::assert_relative_eq!(
+            single.state().cast::<f64>(),
+            *double.state(),
+            max_relative = 1e-3
+        );
     }
 }
