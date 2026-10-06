@@ -6,6 +6,9 @@ rust-version = "1.89"
 license = "MIT OR Apache-2.0"
 description = "Type-safe, no_std Kalman filters: KF, EKF, UKF and smoothers"
 categories = ["mathematics", "science::robotics", "embedded", "no-std"]
+keywords = ["kalman", "filter", "ukf", "ekf", "no-std"]
+readme = "README.md"
+documentation = "https://docs.rs/typed-kalman"
 # Benchmark data and tooling stay in the repo; the scenario files alone exceed crates.io's limit.
 exclude = [
     "tests/vectors/", "bench/", "results/", "scripts/", "CLAUDE.md", "kalman-rust-repo-guide.md",

@@ -1,0 +1,10 @@
+# cargo-release configuration (https://github.com/crate-ci/cargo-release).
+# `cargo release <version>` previews by default; add --execute to release for real.
+
+# Release only from the main branch, after CI passes there.
+allow-branch = ["main", "master"]
+
+# Turn the Unreleased section into this version's, dated, and start a new Unreleased section.
+pre-release-replacements = [
+  { file = "CHANGELOG.md", search = "## \\[Unreleased\\]", replace = "## [Unreleased]\n\n## [{{version}}] - {{date}}", exactly = 1 },
+]
