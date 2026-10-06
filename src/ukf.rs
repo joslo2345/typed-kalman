@@ -33,20 +33,20 @@ impl Default for UkfParams {
 
 /// Sigma-point weights derived from [`UkfParams`] for an `N`-dimensional state.
 #[derive(Debug, Clone, Copy, PartialEq)]
-struct Weights {
+pub(crate) struct Weights {
     /// Mean weight of the center point.
-    mean0: f64,
+    pub mean0: f64,
     /// Covariance weight of the center point.
-    cov0: f64,
+    pub cov0: f64,
     /// Mean and covariance weight of every other point.
-    rest: f64,
+    pub rest: f64,
     /// Distance of the outer points from the mean, in standard deviations.
-    gamma: f64,
+    pub gamma: f64,
 }
 
 impl Weights {
     /// Validates `params` and derives the weights.
-    fn new<const N: usize>(params: &UkfParams) -> Result<Self, KalmanError> {
+    pub(crate) fn new<const N: usize>(params: &UkfParams) -> Result<Self, KalmanError> {
         let UkfParams { alpha, beta, kappa } = *params;
         let n_plus_lambda = alpha * alpha * (N as f64 + kappa);
         let valid = alpha.is_finite() && beta.is_finite() && n_plus_lambda.is_finite();
@@ -57,7 +57,7 @@ impl Weights {
     }
 
     /// Derives the weights without validating `params`.
-    fn unchecked<const N: usize>(params: &UkfParams) -> Self {
+    pub(crate) fn unchecked<const N: usize>(params: &UkfParams) -> Self {
         let UkfParams { alpha, beta, kappa } = *params;
         let n_plus_lambda = alpha * alpha * (N as f64 + kappa);
         let mean0 = (n_plus_lambda - N as f64) / n_plus_lambda;
@@ -76,10 +76,10 @@ impl Weights {
 /// Point `i` of `plus` and `minus` lies at `±gamma` times column `i` of the covariance's
 /// Cholesky factor. Storing them as two `D × N` matrices avoids needing `2N + 1` as a const
 /// generic, which stable Rust doesn't support.
-struct SigmaPoints<const D: usize, const N: usize> {
-    center: SVector<f64, D>,
-    plus: SMatrix<f64, D, N>,
-    minus: SMatrix<f64, D, N>,
+pub(crate) struct SigmaPoints<const D: usize, const N: usize> {
+    pub center: SVector<f64, D>,
+    pub plus: SMatrix<f64, D, N>,
+    pub minus: SMatrix<f64, D, N>,
 }
 
 impl<const N: usize> SigmaPoints<N, N> {
@@ -87,25 +87,31 @@ impl<const N: usize> SigmaPoints<N, N> {
     fn draw(x: &SVector<f64, N>, p: &SMatrix<f64, N, N>, w: &Weights) -> Result<Self, KalmanError> {
         let l = Cholesky::new(*p)
             .ok_or(KalmanError::CovarianceNotPositiveDefinite)?
-            .unpack()
-            * w.gamma;
+            .unpack();
+        Ok(Self::from_factor(x, &l, w))
+    }
+
+    /// Draws sigma points around mean `x` from a square root `l` of the covariance
+    /// (any matrix with `P = L Lᵀ`).
+    pub(crate) fn from_factor(x: &SVector<f64, N>, l: &SMatrix<f64, N, N>, w: &Weights) -> Self {
+        let l = l * w.gamma;
         let mut plus = SMatrix::<f64, N, N>::zeros();
         let mut minus = SMatrix::<f64, N, N>::zeros();
         for i in 0..N {
             plus.set_column(i, &(x + l.column(i)));
             minus.set_column(i, &(x - l.column(i)));
         }
-        Ok(Self {
+        Self {
             center: *x,
             plus,
             minus,
-        })
+        }
     }
 }
 
 impl<const D: usize, const N: usize> SigmaPoints<D, N> {
     /// Passes every point through `g`.
-    fn map<const E: usize>(
+    pub(crate) fn map<const E: usize>(
         &self,
         g: impl Fn(&SVector<f64, D>) -> SVector<f64, E>,
     ) -> SigmaPoints<E, N> {
@@ -123,7 +129,7 @@ impl<const D: usize, const N: usize> SigmaPoints<D, N> {
     }
 
     /// Returns the weighted mean of the points.
-    fn mean(&self, w: &Weights) -> SVector<f64, D> {
+    pub(crate) fn mean(&self, w: &Weights) -> SVector<f64, D> {
         let mut sum = SVector::<f64, D>::zeros();
         for i in 0..N {
             sum += self.plus.column(i) + self.minus.column(i);
@@ -133,7 +139,7 @@ impl<const D: usize, const N: usize> SigmaPoints<D, N> {
 
     /// Returns the weighted cross-covariance between these points (around `mean`) and
     /// `other` (around `other_mean`).
-    fn cross_covariance<const E: usize>(
+    pub(crate) fn cross_covariance<const E: usize>(
         &self,
         mean: &SVector<f64, D>,
         other: &SigmaPoints<E, N>,

@@ -1,1 +1,367 @@
 //! Square-root unscented Kalman filter.
+
+use nalgebra::{Cholesky, ComplexField, SMatrix, SVector};
+
+use crate::error::KalmanError;
+use crate::model::{MeasurementModel, ProcessModel};
+use crate::ukf::{SigmaPoints, UkfParams, Weights};
+use crate::update::all_finite;
+
+/// A square-root unscented Kalman filter over an `N`-dimensional state.
+///
+/// It propagates the lower-triangular Cholesky factor `S` of the covariance (`P = S Sᵀ`)
+/// instead of `P` itself. That keeps the covariance symmetric positive-semidefinite by
+/// construction and halves the dynamic range the arithmetic has to handle, which matters most
+/// in `f32`.
+///
+/// Noise is supplied as square roots too: any matrix `G` with `Q = G Gᵀ` (or `R = G Gᵀ`), such
+/// as the Cholesky factor. `G` may have any number of columns, so singular noise is fine.
+/// The filter is left unchanged on any error.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SqrtUkf<const N: usize> {
+    x: SVector<f64, N>,
+    s: SMatrix<f64, N, N>,
+    weights: Weights,
+}
+
+impl<const N: usize> SqrtUkf<N> {
+    /// Creates a filter with initial state `x`, covariance `p` and the default [`UkfParams`].
+    ///
+    /// Returns [`KalmanError::CovarianceNotPositiveDefinite`] if `p` can't be factored.
+    pub fn new(x: SVector<f64, N>, p: SMatrix<f64, N, N>) -> Result<Self, KalmanError> {
+        Self::with_weights(x, p, Weights::unchecked::<N>(&UkfParams::default()))
+    }
+
+    /// Creates a filter with custom unscented-transform parameters.
+    ///
+    /// Returns [`KalmanError::InvalidInput`] for invalid parameters (see
+    /// [`Ukf::with_params`](crate::ukf::Ukf::with_params)), or
+    /// [`KalmanError::CovarianceNotPositiveDefinite`] if `p` can't be factored.
+    pub fn with_params(
+        x: SVector<f64, N>,
+        p: SMatrix<f64, N, N>,
+        params: UkfParams,
+    ) -> Result<Self, KalmanError> {
+        Self::with_weights(x, p, Weights::new::<N>(&params)?)
+    }
+
+    fn with_weights(
+        x: SVector<f64, N>,
+        p: SMatrix<f64, N, N>,
+        weights: Weights,
+    ) -> Result<Self, KalmanError> {
+        let s = Cholesky::new(p)
+            .ok_or(KalmanError::CovarianceNotPositiveDefinite)?
+            .unpack();
+        Ok(Self { x, s, weights })
+    }
+
+    /// Returns the current state estimate.
+    pub fn state(&self) -> &SVector<f64, N> {
+        &self.x
+    }
+
+    /// Returns the lower-triangular square root `S` of the state covariance.
+    pub fn sqrt_covariance(&self) -> &SMatrix<f64, N, N> {
+        &self.s
+    }
+
+    /// Returns the state covariance `S Sᵀ`.
+    pub fn covariance(&self) -> SMatrix<f64, N, N> {
+        self.s * self.s.transpose()
+    }
+
+    /// Propagates the state and its covariance factor through `model`, with process noise
+    /// `Q = q_sqrt q_sqrtᵀ`.
+    pub fn predict<P: ProcessModel<N>, const K: usize>(
+        &mut self,
+        model: &P,
+        q_sqrt: &SMatrix<f64, N, K>,
+        dt: f64,
+    ) -> Result<(), KalmanError> {
+        let w = &self.weights;
+        let points = SigmaPoints::from_factor(&self.x, &self.s, w).map(|s| model.predict(s, dt));
+        let x = points.mean(w);
+        let s = weighted_factor(&points, &x, q_sqrt, w)
+            .ok_or(KalmanError::CovarianceNotPositiveDefinite)?;
+
+        if !all_finite(x.as_slice()) || !all_finite(s.as_slice()) {
+            return Err(KalmanError::NumericalFailure);
+        }
+        self.x = x;
+        self.s = s;
+        Ok(())
+    }
+
+    /// Corrects the estimate with measurement `z` and measurement noise
+    /// `R = r_sqrt r_sqrtᵀ`.
+    ///
+    /// Returns the normalized innovation squared (NIS).
+    pub fn update<H: MeasurementModel<N, M>, const M: usize, const K: usize>(
+        &mut self,
+        model: &H,
+        z: &SVector<f64, M>,
+        r_sqrt: &SMatrix<f64, M, K>,
+    ) -> Result<f64, KalmanError> {
+        if !all_finite(z.as_slice()) || !all_finite(r_sqrt.as_slice()) {
+            return Err(KalmanError::InvalidInput);
+        }
+
+        let w = &self.weights;
+        let points = SigmaPoints::from_factor(&self.x, &self.s, w);
+        let measured = points.map(|s| model.measure(s));
+        let z_pred = measured.mean(w);
+        let s_z = weighted_factor(&measured, &z_pred, r_sqrt, w)
+            .ok_or(KalmanError::SingularInnovation)?;
+        let p_xz = points.cross_covariance(&self.x, &measured, &z_pred, w);
+
+        // K = Pxz (Sz Szᵀ)⁻¹, computed as (Sz⁻ᵀ Sz⁻¹ Pxzᵀ)ᵀ with two triangular solves.
+        let k = s_z
+            .solve_lower_triangular(&p_xz.transpose())
+            .and_then(|t| s_z.tr_solve_lower_triangular(&t))
+            .ok_or(KalmanError::SingularInnovation)?
+            .transpose();
+        let y = z - z_pred;
+        let whitened = s_z
+            .solve_lower_triangular(&y)
+            .ok_or(KalmanError::SingularInnovation)?;
+        let nis = whitened.norm_squared();
+        let x = self.x + k * y;
+
+        // P' = P - (K Sz)(K Sz)ᵀ, applied as one rank-one downdate per column of K Sz.
+        let u = k * s_z;
+        let mut s = self.s;
+        for j in 0..M {
+            downdate(&mut s, u.column(j).into_owned())
+                .ok_or(KalmanError::CovarianceNotPositiveDefinite)?;
+        }
+
+        if !all_finite(x.as_slice()) || !all_finite(s.as_slice()) || !nis.is_finite() {
+            return Err(KalmanError::NumericalFailure);
+        }
+        self.x = x;
+        self.s = s;
+        Ok(nis)
+    }
+}
+
+/// Returns a lower-triangular `L` with `L Lᵀ` equal to the weighted covariance of `points`
+/// around `mean`, plus `noise_sqrt noise_sqrtᵀ`.
+///
+/// Returns `None` if a negative center weight would make the result indefinite.
+fn weighted_factor<const D: usize, const N: usize, const K: usize>(
+    points: &SigmaPoints<D, N>,
+    mean: &SVector<f64, D>,
+    noise_sqrt: &SMatrix<f64, D, K>,
+    w: &Weights,
+) -> Option<SMatrix<f64, D, D>> {
+    let mut l = SMatrix::<f64, D, D>::zeros();
+    let scale = ComplexField::sqrt(w.rest);
+    for i in 0..N {
+        update(&mut l, (points.plus.column(i) - mean) * scale);
+        update(&mut l, (points.minus.column(i) - mean) * scale);
+    }
+    for j in 0..K {
+        update(&mut l, noise_sqrt.column(j).into_owned());
+    }
+
+    let center = points.center - mean;
+    if w.cov0 >= 0.0 {
+        update(&mut l, center * ComplexField::sqrt(w.cov0));
+    } else {
+        downdate(&mut l, center * ComplexField::sqrt(-w.cov0))?;
+    }
+    Some(l)
+}
+
+/// Replaces lower-triangular `l` with the factor of `l lᵀ + v vᵀ`, using Givens rotations.
+///
+/// Unlike the textbook update, this works when `l` has zeros on its diagonal, so a factor can
+/// be built up from a zero matrix.
+fn update<const D: usize>(l: &mut SMatrix<f64, D, D>, mut v: SVector<f64, D>) {
+    for k in 0..D {
+        let (lkk, vk) = (l[(k, k)], v[k]);
+        let r = ComplexField::sqrt(lkk * lkk + vk * vk);
+        if r == 0.0 {
+            continue;
+        }
+        let (c, s) = (lkk / r, vk / r);
+        l[(k, k)] = r;
+        for i in k + 1..D {
+            let (lik, vi) = (l[(i, k)], v[i]);
+            l[(i, k)] = c * lik + s * vi;
+            v[i] = c * vi - s * lik;
+        }
+    }
+}
+
+/// Replaces lower-triangular `l` with the factor of `l lᵀ - v vᵀ`, using hyperbolic rotations.
+///
+/// Returns `None`, leaving `l` partially modified, if the result wouldn't be positive-definite.
+fn downdate<const D: usize>(l: &mut SMatrix<f64, D, D>, mut v: SVector<f64, D>) -> Option<()> {
+    for k in 0..D {
+        let (lkk, vk) = (l[(k, k)], v[k]);
+        let r2 = lkk * lkk - vk * vk;
+        if r2 <= 0.0 || r2.is_nan() {
+            return None;
+        }
+        let r = ComplexField::sqrt(r2);
+        let (c, s) = (r / lkk, vk / lkk);
+        l[(k, k)] = r;
+        for i in k + 1..D {
+            l[(i, k)] = (l[(i, k)] - s * v[i]) / c;
+            v[i] = c * v[i] - s * l[(i, k)];
+        }
+    }
+    Some(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ukf::Ukf;
+    use nalgebra::{Matrix1, Matrix2, Matrix3, Vector1, Vector2, Vector3};
+
+    #[rustfmt::skip]
+    fn spd3() -> Matrix3<f64> {
+        Matrix3::new(
+            4.0, 1.0, 0.5,
+            1.0, 3.0, 0.2,
+            0.5, 0.2, 2.0,
+        )
+    }
+
+    #[test]
+    fn update_matches_direct_factorization() {
+        let v = Vector3::new(0.3, -1.2, 0.7);
+        let mut l = Cholesky::new(spd3()).unwrap().unpack();
+        update(&mut l, v);
+        approx::assert_relative_eq!(
+            l * l.transpose(),
+            spd3() + v * v.transpose(),
+            epsilon = 1e-12
+        );
+    }
+
+    #[test]
+    fn update_builds_a_factor_from_zero() {
+        let mut l = Matrix3::zeros();
+        let (a, b, c) = (
+            Vector3::new(1.0, 2.0, 0.0),
+            Vector3::new(0.0, 1.0, -1.0),
+            Vector3::new(0.5, 0.0, 3.0),
+        );
+        for v in [a, b, c] {
+            update(&mut l, v);
+        }
+        let expected = a * a.transpose() + b * b.transpose() + c * c.transpose();
+        approx::assert_relative_eq!(l * l.transpose(), expected, epsilon = 1e-12);
+    }
+
+    #[test]
+    fn downdate_matches_direct_factorization() {
+        let v = Vector3::new(0.3, -0.5, 0.4);
+        let mut l = Cholesky::new(spd3()).unwrap().unpack();
+        downdate(&mut l, v).unwrap();
+        approx::assert_relative_eq!(
+            l * l.transpose(),
+            spd3() - v * v.transpose(),
+            epsilon = 1e-12
+        );
+    }
+
+    #[test]
+    fn downdate_rejects_an_indefinite_result() {
+        let mut l = Matrix2::identity();
+        assert!(downdate(&mut l, Vector2::new(1.0, 0.0)).is_none());
+    }
+
+    /// A pendulum: angle and angular velocity.
+    struct Pendulum;
+
+    impl ProcessModel<2> for Pendulum {
+        fn predict(&self, x: &Vector2<f64>, dt: f64) -> Vector2<f64> {
+            Vector2::new(x[0] + x[1] * dt, x[1] - 9.81 * x[0].sin() * dt)
+        }
+    }
+
+    /// Horizontal position of the bob on a unit-length arm.
+    struct BobPosition;
+
+    impl MeasurementModel<2, 1> for BobPosition {
+        fn measure(&self, x: &Vector2<f64>) -> Vector1<f64> {
+            Vector1::new(x[0].sin())
+        }
+    }
+
+    fn assert_matches_ukf(params: UkfParams) {
+        let dt = 0.01;
+        let q = Matrix2::new(1e-6, 0.0, 0.0, 1e-4);
+        let r = Matrix1::new(0.01);
+        let q_sqrt = Cholesky::new(q).unwrap().unpack();
+        let r_sqrt = Cholesky::new(r).unwrap().unpack();
+        let (x0, p0) = (Vector2::new(0.5, 0.0), Matrix2::identity() * 0.1);
+
+        let mut ukf = Ukf::with_params(x0, p0, params).unwrap();
+        let mut sr = SqrtUkf::with_params(x0, p0, params).unwrap();
+        for k in 0..1000 {
+            let t = k as f64 * dt;
+            let z = Vector1::new((0.5 * (3.13 * t).cos()).sin());
+
+            ukf.predict(&Pendulum, &q, dt).unwrap();
+            sr.predict(&Pendulum, &q_sqrt, dt).unwrap();
+            let nis_ukf = ukf.update(&BobPosition, &z, &r).unwrap();
+            let nis_sr = sr.update(&BobPosition, &z, &r_sqrt).unwrap();
+
+            approx::assert_relative_eq!(nis_ukf, nis_sr, epsilon = 1e-9);
+            approx::assert_relative_eq!(ukf.state(), sr.state(), epsilon = 1e-9);
+            approx::assert_relative_eq!(*ukf.covariance(), sr.covariance(), epsilon = 1e-9);
+        }
+    }
+
+    #[test]
+    fn matches_ukf_on_a_nonlinear_model() {
+        assert_matches_ukf(UkfParams::default());
+        assert_matches_ukf(UkfParams {
+            alpha: 0.5,
+            beta: 2.0,
+            kappa: 1.0,
+        });
+    }
+
+    #[test]
+    fn negative_center_weight_matches_ukf() {
+        // For N = 2 these give a covariance center weight of -2.25, which exercises the
+        // downdate path in `weighted_factor`.
+        assert_matches_ukf(UkfParams {
+            alpha: 0.5,
+            beta: 0.0,
+            kappa: 0.0,
+        });
+    }
+
+    #[test]
+    fn accepts_a_rectangular_noise_square_root() {
+        // Q = g gᵀ with a single column: noise on velocity only.
+        let g = nalgebra::Matrix2x1::new(0.0, 0.1);
+        let mut sr = SqrtUkf::new(Vector2::new(0.5, 0.0), Matrix2::identity() * 0.1).unwrap();
+        sr.predict(&Pendulum, &g, 0.01).unwrap();
+        assert!(Cholesky::new(sr.covariance()).is_some());
+    }
+
+    #[test]
+    fn non_positive_definite_initial_covariance_is_rejected() {
+        let result = SqrtUkf::new(Vector2::zeros(), Matrix2::new(1.0, 2.0, 2.0, 1.0));
+        assert_eq!(result, Err(KalmanError::CovarianceNotPositiveDefinite));
+    }
+
+    #[test]
+    fn nan_measurement_returns_error_and_keeps_state() {
+        let mut sr = SqrtUkf::new(Vector2::zeros(), Matrix2::identity()).unwrap();
+        let before = sr.clone();
+
+        let result = sr.update(&BobPosition, &Vector1::new(f64::NAN), &Matrix1::new(0.1));
+        assert_eq!(result, Err(KalmanError::InvalidInput));
+        assert_eq!(sr, before);
+    }
+}
