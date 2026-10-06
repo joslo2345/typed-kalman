@@ -11,7 +11,9 @@ pub mod model;
 pub mod smoother;
 pub mod sqrt_ukf;
 pub mod ukf;
+mod update;
 
 pub use ekf::Ekf;
 pub use error::KalmanError;
+pub use linear::LinearKf;
 pub use model::{MeasurementModel, ProcessModel};

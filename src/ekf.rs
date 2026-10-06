@@ -1,9 +1,10 @@
 //! Extended Kalman filter with user-supplied or automatic Jacobians.
 
-use nalgebra::{Cholesky, SMatrix, SVector};
+use nalgebra::{SMatrix, SVector};
 
 use crate::error::KalmanError;
 use crate::model::{MeasurementModel, ProcessModel};
+use crate::update::{self, symmetrize};
 
 /// An extended Kalman filter over an `N`-dimensional state.
 #[derive(Debug, Clone, PartialEq)]
@@ -45,37 +46,13 @@ impl<const N: usize> Ekf<N> {
         z: &SVector<f64, M>,
         r: &SMatrix<f64, M, M>,
     ) -> Result<f64, KalmanError> {
-        if !all_finite(z.as_slice()) || !all_finite(r.as_slice()) {
-            return Err(KalmanError::InvalidInput);
-        }
-
         let h = model.jacobian(&self.x);
         let y = z - model.measure(&self.x);
-        let s = h * self.p * h.transpose() + r;
-        let s_chol = Cholesky::new(s).ok_or(KalmanError::SingularInnovation)?;
-
-        // K = P Hᵀ S⁻¹, computed as (S⁻¹ H P)ᵀ since S and P are symmetric.
-        let k = s_chol.solve(&(h * self.p)).transpose();
-        let i_kh = SMatrix::<f64, N, N>::identity() - k * h;
-        let x = self.x + k * y;
-        let p = symmetrize(i_kh * self.p * i_kh.transpose() + k * r * k.transpose());
-        let nis = y.dot(&s_chol.solve(&y));
-
-        if !all_finite(x.as_slice()) || !all_finite(p.as_slice()) || !nis.is_finite() {
-            return Err(KalmanError::NumericalFailure);
-        }
-        self.x = x;
-        self.p = p;
-        Ok(nis)
+        let corrected = update::joseph(&self.x, &self.p, &h, &y, r)?;
+        self.x = corrected.x;
+        self.p = corrected.p;
+        Ok(corrected.nis)
     }
-}
-
-fn all_finite(values: &[f64]) -> bool {
-    values.iter().all(|v| v.is_finite())
-}
-
-fn symmetrize<const N: usize>(p: SMatrix<f64, N, N>) -> SMatrix<f64, N, N> {
-    (p + p.transpose()) * 0.5
 }
 
 #[cfg(test)]
