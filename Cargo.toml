@@ -1,0 +1,24 @@
+[package]
+name = "kalman-rs"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Type-safe, no_std Kalman filters: KF, EKF, UKF and smoothers"
+categories = ["mathematics", "science::robotics", "embedded", "no-std"]
+
+[features]
+default = ["std"]
+std = ["nalgebra/std"]
+autodiff = []
+
+[dependencies]
+nalgebra = { version = "0.35", default-features = false, features = ["libm"] }
+
+[dev-dependencies]
+approx = "0.5"
+proptest = "1"
+criterion = "0.8"
+
+[[bench]]
+name = "filters"
+harness = false
